@@ -86,29 +86,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOM-02 | Phase 1 | Pending |
 | DOM-03 | Phase 1 | Pending |
 | DOM-04 | Phase 1 | Pending |
-| READ-01 | TBD | Pending |
-| READ-02 | TBD | Pending |
-| WRITE-01 | TBD | Pending |
-| WRITE-02 | TBD | Pending |
-| WRITE-03 | TBD | Pending |
-| WRITE-04 | TBD | Pending |
-| ERR-01 | TBD | Pending |
-| ERR-02 | TBD | Pending |
-| ERR-03 | TBD | Pending |
-| VAL-01 | TBD | Pending |
-| VAL-02 | TBD | Pending |
-| INFRA-01 | TBD | Pending |
-| INFRA-02 | TBD | Pending |
-| INFRA-03 | TBD | Pending |
-| INFRA-04 | TBD | Pending |
-| DOC-01 | TBD | Pending |
-| DOC-02 | TBD | Pending |
+| VAL-02 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Pending |
+| READ-01 | Phase 2 | Pending |
+| READ-02 | Phase 2 | Pending |
+| WRITE-01 | Phase 2 | Pending |
+| WRITE-02 | Phase 2 | Pending |
+| WRITE-03 | Phase 2 | Pending |
+| WRITE-04 | Phase 2 | Pending |
+| VAL-01 | Phase 2 | Pending |
+| INFRA-03 | Phase 2 | Pending |
+| INFRA-01 | Phase 3 | Pending |
+| INFRA-04 | Phase 3 | Pending |
+| ERR-01 | Phase 4 | Pending |
+| ERR-02 | Phase 4 | Pending |
+| ERR-03 | Phase 4 | Pending |
+| DOC-01 | Phase 4 | Pending |
+| DOC-02 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 4 (DOM-01–04)
-- Unmapped: 17 ⚠️ (will be resolved by roadmapper)
+- Mapped to phases: 21 (Phase 1: 6, Phase 2: 8, Phase 3: 2, Phase 4: 5)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-27*
-*Last updated: 2026-05-27 after initial definition*
+*Last updated: 2026-05-27 after roadmap creation — full traceability resolved*
