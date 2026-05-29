@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 2 planned — 3 plans in 3 waves, ready to execute
-last_updated: "2026-05-29T23:00:00.000Z"
+status: executing
+stopped_at: Phase 2 context gathered
+last_updated: "2026-05-29T23:12:33.329Z"
 last_activity: 2026-05-29
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 25
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-27)
 
 **Core value:** A correctly layered, richly modeled API that proves Clean and Hexagonal Architecture work together — where the domain drives everything and infrastructure is a detail.
-**Current focus:** Phase 2 — application layer
+**Current focus:** Phase 02 — application-layer
 
 ## Current Position
 
-Phase: 2
-Plan: Ready to execute (3 plans planned)
+Phase: 02 (application-layer) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-05-29
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 01-domain-layer P01 | 6 | 3 tasks | 6 files |
 | Phase 01-domain-layer P02 | 2 | 2 tasks | 2 files |
+| Phase 02 P01 | 7 | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,8 @@ Recent decisions affecting current work:
 - [Phase ?]: DomainException inherits directly from System.Exception (not ArgumentException) — ensures Application layer catch blocks don't accidentally catch unrelated system argument errors
 - [Phase ?]: Age computed via DateOnly.FromDateTime(DateTime.Today) with month/day-aware subtraction — never stored (D-08, D-11)
 - [Phase ?]: CS0628 warning (protected member in sealed class) accepted — EF Core convention requires protected constructor for materialization
+- [Phase ?]: Nullable return on repository lookup; handler throws PersonNotFoundException
+- [Phase ?]: Secondary port lives in inner ring per hexagonal architecture
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-29T22:31:08.464Z
+Last session: 2026-05-29T23:12:33.299Z
 Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-application-layer/02-CONTEXT.md
+Resume file: None
