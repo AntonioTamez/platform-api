@@ -43,7 +43,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. All command and query records, DTOs, and request types compile with references only to Domain and Mediator.Abstractions — no Infrastructure or ASP.NET Core types appear in Application
 **Plans**: 3 plans
 - [x] 02-01-PLAN.md — Application library + IPersonRepository port + PersonNotFoundException + four DTO records + xUnit test project (INFRA-03)
-- [ ] 02-02-PLAN.md — Six CQRS handlers (queries + commands) with three FluentValidation validators, including PatchPersonHandler null-fallback pattern (READ-01, READ-02, WRITE-01, WRITE-02, WRITE-03, WRITE-04)
+- [x] 02-02-PLAN.md — Six CQRS handlers (queries + commands) with three FluentValidation validators, including PatchPersonHandler null-fallback pattern (READ-01, READ-02, WRITE-01, WRITE-02, WRITE-03, WRITE-04)
 - [ ] 02-03-PLAN.md — ValidationBehavior pipeline behavior + AddApplication() DI registration (VAL-01)
 
 ### Phase 3: Infrastructure Layer
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Domain Layer | 2/2 | Complete   | 2026-05-29 |
-| 2. Application Layer | 1/3 | In Progress|  |
+| 2. Application Layer | 2/3 | In Progress|  |
 | 3. Infrastructure Layer | 0/TBD | Not started | - |
 | 4. API Layer | 0/TBD | Not started | - |

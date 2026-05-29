@@ -14,15 +14,15 @@
 
 ### Read Operations
 
-- [ ] **READ-01**: User can retrieve a list of all persons via GET /api/persons
-- [ ] **READ-02**: User can retrieve a single person by ID via GET /api/persons/{id} — returns 404 if not found
+- [x] **READ-01**: User can retrieve a list of all persons via GET /api/persons
+- [x] **READ-02**: User can retrieve a single person by ID via GET /api/persons/{id} — returns 404 if not found
 
 ### Write Operations
 
-- [ ] **WRITE-01**: User can create a new person via POST /api/persons — returns 201 with Location header
-- [ ] **WRITE-02**: User can fully replace a person via PUT /api/persons/{id} — returns 200, 404 if not found
-- [ ] **WRITE-03**: User can partially update a person via PATCH /api/persons/{id} using JSON Patch on a DTO (not the domain entity) — returns 200, 404 if not found
-- [ ] **WRITE-04**: User can delete a person via DELETE /api/persons/{id} — returns 204, 404 if not found
+- [x] **WRITE-01**: User can create a new person via POST /api/persons — returns 201 with Location header
+- [x] **WRITE-02**: User can fully replace a person via PUT /api/persons/{id} — returns 200, 404 if not found
+- [x] **WRITE-03**: User can partially update a person via PATCH /api/persons/{id} using JSON Patch on a DTO (not the domain entity) — returns 200, 404 if not found
+- [x] **WRITE-04**: User can delete a person via DELETE /api/persons/{id} — returns 204, 404 if not found
 
 ### Error Handling
 
@@ -88,12 +88,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOM-04 | Phase 1 | Complete |
 | VAL-02 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
-| READ-01 | Phase 2 | Pending |
-| READ-02 | Phase 2 | Pending |
-| WRITE-01 | Phase 2 | Pending |
-| WRITE-02 | Phase 2 | Pending |
-| WRITE-03 | Phase 2 | Pending |
-| WRITE-04 | Phase 2 | Pending |
+| READ-01 | Phase 2 | Complete |
+| READ-02 | Phase 2 | Complete |
+| WRITE-01 | Phase 2 | Complete |
+| WRITE-02 | Phase 2 | Complete |
+| WRITE-03 | Phase 2 | Complete |
+| WRITE-04 | Phase 2 | Complete |
 | VAL-01 | Phase 2 | Pending |
 | INFRA-03 | Phase 2 | Complete |
 | INFRA-01 | Phase 3 | Pending |
