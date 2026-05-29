@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Phase 2 context gathered
-last_updated: "2026-05-29T22:31:08.501Z"
+stopped_at: Phase 2 planned — 3 plans in 3 waves, ready to execute
+last_updated: "2026-05-29T23:00:00.000Z"
 last_activity: 2026-05-29
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
+  total_plans: 5
   completed_plans: 2
   percent: 25
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-27)
 ## Current Position
 
 Phase: 2
-Plan: Not started
-Status: Ready to plan
+Plan: Ready to execute (3 plans planned)
+Status: Ready to execute
 Last activity: 2026-05-29
 
 Progress: [██████████] 100%
@@ -78,7 +78,7 @@ None yet.
 ### Blockers/Concerns
 
 - Phase 4 (PATCH): Multiple documented failure modes. JsonPatchDocument<T> must target UpdatePersonDto (not Person entity). ModelState must be passed to ApplyTo(). Validate after ApplyTo(), not before. Consider dedicated research pass before Phase 4 planning.
-- Phase 2: Final decision on Mediator 3.0.2 vs. MediatR 12.5.0 needed before planning begins (pipeline behavior registration differs slightly).
+- Phase 2: Decision made — Mediator 3.0.2 (martinothamar) confirmed. `Mediator.SourceGenerator` installs ONLY in Phase 4's Api project; Application installs only `Mediator.Abstractions`. `AddMediator()` deferred to Phase 4's `Program.cs`.
 
 ## Deferred Items
 
