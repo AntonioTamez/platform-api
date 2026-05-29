@@ -32,7 +32,7 @@
 
 ### Validation
 
-- [ ] **VAL-01**: Input validation runs in the Application layer via a FluentValidation pipeline behavior — not in controllers
+- [x] **VAL-01**: Input validation runs in the Application layer via a FluentValidation pipeline behavior — not in controllers
 - [x] **VAL-02**: Domain invariant validation runs inside Person.Create() and update methods — not in handlers
 
 ### Infrastructure
@@ -94,7 +94,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WRITE-02 | Phase 2 | Complete |
 | WRITE-03 | Phase 2 | Complete |
 | WRITE-04 | Phase 2 | Complete |
-| VAL-01 | Phase 2 | Pending |
+| VAL-01 | Phase 2 | Complete |
 | INFRA-03 | Phase 2 | Complete |
 | INFRA-01 | Phase 3 | Pending |
 | INFRA-04 | Phase 3 | Pending |

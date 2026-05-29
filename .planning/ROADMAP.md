@@ -13,7 +13,7 @@ PersonsAPI is built layer-by-layer following Clean + Hexagonal Architecture depe
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Domain Layer** - Person entity with rich model, computed Age, factory method, and update methods — zero outbound dependencies (completed 2026-05-29)
-- [ ] **Phase 2: Application Layer** - Ports, CQRS commands/queries, handlers, DTOs, and FluentValidation pipeline behavior
+- [x] **Phase 2: Application Layer** - Ports, CQRS commands/queries, handlers, DTOs, and FluentValidation pipeline behavior (completed 2026-05-29)
 - [ ] **Phase 3: Infrastructure Layer** - EF Core InMemory adapter, PersonDbContext, repository implementation, and data seeder
 - [ ] **Phase 4: API Layer** - PersonsController, Program.cs wiring, Problem Details, OpenAPI + Scalar, and PATCH endpoint
 
@@ -44,7 +44,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 - [x] 02-01-PLAN.md — Application library + IPersonRepository port + PersonNotFoundException + four DTO records + xUnit test project (INFRA-03)
 - [x] 02-02-PLAN.md — Six CQRS handlers (queries + commands) with three FluentValidation validators, including PatchPersonHandler null-fallback pattern (READ-01, READ-02, WRITE-01, WRITE-02, WRITE-03, WRITE-04)
-- [ ] 02-03-PLAN.md — ValidationBehavior pipeline behavior + AddApplication() DI registration (VAL-01)
+- [x] 02-03-PLAN.md — ValidationBehavior pipeline behavior + AddApplication() DI registration (VAL-01)
 
 ### Phase 3: Infrastructure Layer
 **Goal**: The Infrastructure layer provides a working EF Core InMemory persistence adapter — PersonDbContext, PersonEntityConfiguration (with builder.Ignore(p => p.Age)), PersonRepository implementing IPersonRepository, and a DataSeeder that populates 3–5 persons on startup
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Domain Layer | 2/2 | Complete   | 2026-05-29 |
-| 2. Application Layer | 2/3 | In Progress|  |
+| 2. Application Layer | 3/3 | Complete   | 2026-05-29 |
 | 3. Infrastructure Layer | 0/TBD | Not started | - |
 | 4. API Layer | 0/TBD | Not started | - |
