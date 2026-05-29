@@ -33,12 +33,12 @@
 ### Validation
 
 - [ ] **VAL-01**: Input validation runs in the Application layer via a FluentValidation pipeline behavior — not in controllers
-- [ ] **VAL-02**: Domain invariant validation runs inside Person.Create() and update methods — not in handlers
+- [x] **VAL-02**: Domain invariant validation runs inside Person.Create() and update methods — not in handlers
 
 ### Infrastructure
 
 - [ ] **INFRA-01**: EF Core InMemory provider is used as the persistence adapter — no real database required
-- [ ] **INFRA-02**: Domain project has zero EF Core NuGet references — isolation enforced at .csproj level
+- [x] **INFRA-02**: Domain project has zero EF Core NuGet references — isolation enforced at .csproj level
 - [ ] **INFRA-03**: IPersonRepository port interface lives in the Application layer — not in Infrastructure
 - [ ] **INFRA-04**: Application seeds 3–5 hardcoded Person records on startup for immediate manual testing
 
@@ -86,8 +86,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOM-02 | Phase 1 | Pending |
 | DOM-03 | Phase 1 | Pending |
 | DOM-04 | Phase 1 | Pending |
-| VAL-02 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
+| VAL-02 | Phase 1 | Complete |
+| INFRA-02 | Phase 1 | Complete |
 | READ-01 | Phase 2 | Pending |
 | READ-02 | Phase 2 | Pending |
 | WRITE-01 | Phase 2 | Pending |

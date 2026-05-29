@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Person entity exposes UpdateName() and UpdateDateOfBirth() as the only mutation paths — no public property setters exist
   4. PersonsAPI.Domain.csproj contains zero Microsoft.EntityFrameworkCore PackageReference entries — isolation is enforced at the .csproj level, not by convention
 **Plans**: 2 plans
-- [ ] 01-01-PLAN.md — Solution + zero-dependency Domain library + DomainException + xUnit test harness (INFRA-02, VAL-02)
+- [x] 01-01-PLAN.md — Solution + zero-dependency Domain library + DomainException + xUnit test harness (INFRA-02, VAL-02)
 - [ ] 01-02-PLAN.md — Person rich domain entity built test-first: invariants, computed Age, factory, update methods (DOM-01..04, VAL-02)
 
 ### Phase 2: Application Layer
@@ -72,7 +72,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Domain Layer | 0/2 | Not started | - |
+| 1. Domain Layer | 1/2 | In Progress|  |
 | 2. Application Layer | 0/TBD | Not started | - |
 | 3. Infrastructure Layer | 0/TBD | Not started | - |
 | 4. API Layer | 0/TBD | Not started | - |
