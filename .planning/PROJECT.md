@@ -12,7 +12,8 @@ A correctly layered, richly modeled API that proves Clean and Hexagonal Architec
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Rich Person domain model with calculated Age from DateOfBirth (no anemic models) — Validated in Phase 01: domain-layer
+- [x] EF Core InMemory provider (Domain layer isolated, zero PackageReference) — Validated in Phase 01: domain-layer
 
 ### Active
 
@@ -54,8 +55,9 @@ A correctly layered, richly modeled API that proves Clean and Hexagonal Architec
 |----------|-----------|---------|
 | EF Core InMemory over fake List<T> | Applies real EF patterns (DbContext, IQueryable) while keeping zero setup | — Pending |
 | Clean + Hexagonal combined | Hexagonal defines port/adapter boundaries; Clean defines layer ownership | — Pending |
-| Rich domain model on Person | Age calculation belongs to the entity — encapsulates business logic | — Pending |
+| Rich domain model on Person | Age calculation belongs to the entity — encapsulates business logic | Confirmed in Phase 01: Person.Create() enforces all invariants; Age computed in getter |
 | Controllers over Minimal API | Explicit requirement; controllers map better to Clean's Presentation layer | — Pending |
+| DomainException inherits Exception directly | Application layer catches by type; not ArgumentException to avoid conflating domain violations with BCL errors | Confirmed in Phase 01: DomainException : Exception, guarded by inheritance test |
 
 ## Evolution
 
@@ -75,4 +77,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-27 after initialization*
+*Last updated: 2026-05-29 after Phase 01 (domain-layer) completion*
