@@ -12,7 +12,7 @@ PersonsAPI is built layer-by-layer following Clean + Hexagonal Architecture depe
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Domain Layer** - Person entity with rich model, computed Age, factory method, and update methods — zero outbound dependencies
+- [x] **Phase 1: Domain Layer** - Person entity with rich model, computed Age, factory method, and update methods — zero outbound dependencies (completed 2026-05-29)
 - [ ] **Phase 2: Application Layer** - Ports, CQRS commands/queries, handlers, DTOs, and FluentValidation pipeline behavior
 - [ ] **Phase 3: Infrastructure Layer** - EF Core InMemory adapter, PersonDbContext, repository implementation, and data seeder
 - [ ] **Phase 4: API Layer** - PersonsController, Program.cs wiring, Problem Details, OpenAPI + Scalar, and PATCH endpoint
@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. PersonsAPI.Domain.csproj contains zero Microsoft.EntityFrameworkCore PackageReference entries — isolation is enforced at the .csproj level, not by convention
 **Plans**: 2 plans
 - [x] 01-01-PLAN.md — Solution + zero-dependency Domain library + DomainException + xUnit test harness (INFRA-02, VAL-02)
-- [ ] 01-02-PLAN.md — Person rich domain entity built test-first: invariants, computed Age, factory, update methods (DOM-01..04, VAL-02)
+- [x] 01-02-PLAN.md — Person rich domain entity built test-first: invariants, computed Age, factory, update methods (DOM-01..04, VAL-02)
 
 ### Phase 2: Application Layer
 **Goal**: The Application layer owns all port interfaces and use-case contracts — IPersonRepository lives in Application/Ports/, every CRUD + PATCH operation has a command or query record plus a handler, DTOs are defined, and a FluentValidation pipeline behavior intercepts all requests before handlers run
@@ -72,7 +72,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Domain Layer | 1/2 | In Progress|  |
+| 1. Domain Layer | 2/2 | Complete   | 2026-05-29 |
 | 2. Application Layer | 0/TBD | Not started | - |
 | 3. Infrastructure Layer | 0/TBD | Not started | - |
 | 4. API Layer | 0/TBD | Not started | - |

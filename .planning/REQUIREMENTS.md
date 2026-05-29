@@ -7,10 +7,10 @@
 
 ### Domain Model
 
-- [ ] **DOM-01**: Person entity encapsulates FirstName, PaternalLastName, MaternalLastName, and DateOfBirth with private setters — no public property mutation
-- [ ] **DOM-02**: Person entity exposes a computed Age property derived from DateOfBirth using DateOnly comparison (month + day aware) — never stored
-- [ ] **DOM-03**: Person entity provides a static factory method Person.Create() that validates invariants and is the only way to construct a valid instance
-- [ ] **DOM-04**: Person entity exposes intention-revealing update methods (e.g., UpdateName, UpdateDateOfBirth) — external code never assigns properties directly
+- [x] **DOM-01**: Person entity encapsulates FirstName, PaternalLastName, MaternalLastName, and DateOfBirth with private setters — no public property mutation
+- [x] **DOM-02**: Person entity exposes a computed Age property derived from DateOfBirth using DateOnly comparison (month + day aware) — never stored
+- [x] **DOM-03**: Person entity provides a static factory method Person.Create() that validates invariants and is the only way to construct a valid instance
+- [x] **DOM-04**: Person entity exposes intention-revealing update methods (e.g., UpdateName, UpdateDateOfBirth) — external code never assigns properties directly
 
 ### Read Operations
 
@@ -82,10 +82,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DOM-01 | Phase 1 | Pending |
-| DOM-02 | Phase 1 | Pending |
-| DOM-03 | Phase 1 | Pending |
-| DOM-04 | Phase 1 | Pending |
+| DOM-01 | Phase 1 | Complete |
+| DOM-02 | Phase 1 | Complete |
+| DOM-03 | Phase 1 | Complete |
+| DOM-04 | Phase 1 | Complete |
 | VAL-02 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
 | READ-01 | Phase 2 | Pending |
