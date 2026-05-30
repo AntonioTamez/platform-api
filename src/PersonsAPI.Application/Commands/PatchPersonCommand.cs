@@ -20,6 +20,10 @@ public sealed class PatchPersonCommandValidator : AbstractValidator<PatchPersonC
 {
     public PatchPersonCommandValidator()
     {
+        RuleFor(x => x.Id)
+            .GreaterThan(0)
+            .WithMessage("Id must be a positive integer.");
+
         When(x => x.Dto.FirstName is not null, () =>
         {
             RuleFor(x => x.Dto.FirstName!)

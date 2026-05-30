@@ -19,6 +19,10 @@ public sealed class UpdatePersonCommandValidator : AbstractValidator<UpdatePerso
 {
     public UpdatePersonCommandValidator()
     {
+        RuleFor(x => x.Id)
+            .GreaterThan(0)
+            .WithMessage("Id must be a positive integer.");
+
         RuleFor(x => x.Dto.FirstName)
             .NotEmpty()
             .MinimumLength(2)
