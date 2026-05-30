@@ -58,15 +58,17 @@ public sealed class ValidationBehavior<TMessage, TResponse>(
         MessageHandlerDelegate<TMessage, TResponse> next,
         CancellationToken cancellationToken)
     {
+        var validatorList = validators.ToList();
+
         // D-10: graceful short-circuit when no validators are registered for this message type.
         // Read queries (no validator) and DeletePersonCommand pass through unchanged.
-        if (!validators.Any())
+        if (validatorList.Count == 0)
             return await next(message, cancellationToken);
 
         // Run all validators in parallel for this message.
         var context = new ValidationContext<TMessage>(message);
         var results = await Task.WhenAll(
-            validators.Select(v => v.ValidateAsync(context, cancellationToken)));
+            validatorList.Select(v => v.ValidateAsync(context, cancellationToken)));
 
         // Aggregate all failures across all validators; filter out any null entries.
         var failures = results
