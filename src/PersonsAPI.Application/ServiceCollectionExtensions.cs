@@ -1,5 +1,4 @@
 using FluentValidation;
-using Mediator;
 using Microsoft.Extensions.DependencyInjection;
 using PersonsAPI.Application.Behaviors;
 
@@ -24,8 +23,7 @@ namespace PersonsAPI.Application;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers all FluentValidation validators from the Application assembly and the
-    /// <see cref="ValidationBehavior{TMessage, TResponse}"/> open-generic pipeline behavior.
+    /// Registers all FluentValidation validators from the Application assembly.
     ///
     /// <list type="bullet">
     ///   <item>
@@ -39,10 +37,11 @@ public static class ServiceCollectionExtensions
     ///   </item>
     ///   <item>
     ///     <description>
-    ///       The open-generic <c>IPipelineBehavior&lt;,&gt;</c> registration lets DI construct
-    ///       closed <see cref="ValidationBehavior{TMessage, TResponse}"/> instances per
-    ///       (TMessage, TResponse) pair when Phase 4 wires it through <c>AddMediator</c>'s
-    ///       <c>options.PipelineBehaviors</c> list.
+    ///       <see cref="ValidationBehavior{TMessage, TResponse}"/> is <b>not</b> registered
+    ///       here. Phase 4's <c>AddMediator(options =&gt; options.PipelineBehaviors =
+    ///       [typeof(ValidationBehavior&lt;,&gt;)])</c> call in <c>Program.cs</c> is the sole
+    ///       correct registration point. A duplicate <c>AddScoped</c> registration here would
+    ///       cause double invocation per dispatch with Mediator source generator 3.x (WR-04).
     ///     </description>
     ///   </item>
     /// </list>
@@ -67,14 +66,6 @@ public static class ServiceCollectionExtensions
         services.AddValidatorsFromAssembly(
             typeof(IApplicationMarker).Assembly,
             ServiceLifetime.Scoped);
-
-        // Register the open-generic ValidationBehavior so DI can resolve closed instances
-        // per (TMessage, TResponse) pair when Phase 4 supplies it to Mediator's pipeline.
-        // This registration makes the behavior available to the DI container;
-        // Mediator's AddMediator() call in Phase 4 wires it into the dispatch pipeline.
-        services.AddScoped(
-            typeof(IPipelineBehavior<,>),
-            typeof(ValidationBehavior<,>));
 
         return services;
     }
