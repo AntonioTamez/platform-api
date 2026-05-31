@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>14</LangVersion>
+    <RootNamespace>PersonsAPI.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PersonsAPI.Application\PersonsAPI.Application.csproj" />
+    <ProjectReference Include="..\PersonsAPI.Infrastructure\PersonsAPI.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mediator.SourceGenerator" Version="3.0.2" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.AspNetCore.JsonPatch.SystemTextJson" Version="10.0.8" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.14.14" />
+  </ItemGroup>
+
+</Project>
