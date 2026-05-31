@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Domain Layer** - Person entity with rich model, computed Age, factory method, and update methods — zero outbound dependencies (completed 2026-05-29)
 - [x] **Phase 2: Application Layer** - Ports, CQRS commands/queries, handlers, DTOs, and FluentValidation pipeline behavior (completed 2026-05-29)
-- [ ] **Phase 3: Infrastructure Layer** - EF Core InMemory adapter, PersonDbContext, repository implementation, and data seeder
+- [x] **Phase 3: Infrastructure Layer** - EF Core InMemory adapter, PersonDbContext, repository implementation, and data seeder (completed 2026-05-31)
 - [ ] **Phase 4: API Layer** - PersonsController, Program.cs wiring, Problem Details, OpenAPI + Scalar, and PATCH endpoint
 
 ## Phase Details
@@ -70,7 +70,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] 03-01-PLAN.md — Infrastructure project + PersonDbContext + PersonEntityConfiguration (builder.Ignore Age) + PersonRepository + AddInfrastructure DI (INFRA-01)
 - [x] 03-02-PLAN.md — Static DataSeeder.SeedAsync extension on IServiceProvider — 3 hardcoded Mexican-named persons, idempotent, NOT registered in DI (INFRA-04)
-- [ ] 03-03-PLAN.md — PersonsAPI.Infrastructure.Tests project + 5 PersonRepositoryTests (one per IPersonRepository method, isolated Guid-named InMemory DB per test)
+- [x] 03-03-PLAN.md — PersonsAPI.Infrastructure.Tests project + 5 PersonRepositoryTests (one per IPersonRepository method, isolated Guid-named InMemory DB per test)
 
 ### Phase 4: API Layer
 
@@ -96,5 +96,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Domain Layer | 2/2 | Complete   | 2026-05-29 |
 | 2. Application Layer | 3/3 | Complete    | 2026-05-29 |
-| 3. Infrastructure Layer | 2/3 | In Progress|  |
+| 3. Infrastructure Layer | 3/3 | Complete   | 2026-05-31 |
 | 4. API Layer | 0/TBD | Not started | - |
