@@ -1,4 +1,5 @@
 using Mediator;
+using Microsoft.Extensions.DependencyInjection;
 using PersonsAPI.Api.ExceptionHandlers;
 using PersonsAPI.Application;
 using PersonsAPI.Application.Behaviors;
@@ -14,7 +15,10 @@ builder.Services.AddExceptionHandler<PersonNotFoundExceptionHandler>();  // D-01
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();      // D-01: Validation second
 builder.Services.AddOpenApi();                                            // DOC-01
 builder.Services.AddMediator(options =>
-    options.PipelineBehaviors = [typeof(ValidationBehavior<,>)]);        // Mediator + ValidationBehavior pipeline
+{
+    options.ServiceLifetime = ServiceLifetime.Scoped;                    // handlers share scope with PersonDbContext
+    options.PipelineBehaviors = [typeof(ValidationBehavior<,>)];        // Mediator + ValidationBehavior pipeline
+});
 builder.Services.AddApplication();                                        // FluentValidation validators
 builder.Services.AddInfrastructure();                                     // DbContext + Repository
 
