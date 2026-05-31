@@ -17,21 +17,21 @@ public class PatchPersonCommandValidatorTests
     public void Validate_AllFieldsNull_HasNoErrors()
     {
         // Proves null fields skip validation entirely (Pitfall 5 guard).
-        var command = new PatchPersonCommand(1, new UpdatePersonDto(null, null, null, null));
+        var command = new PatchPersonCommand(1, new UpdatePersonDto());
         _validator.TestValidate(command).ShouldNotHaveAnyValidationErrors();
     }
 
     [Fact]
     public void Validate_OnlyFirstNameProvidedValid_HasNoErrors()
     {
-        var command = new PatchPersonCommand(1, new UpdatePersonDto("Ada", null, null, null));
+        var command = new PatchPersonCommand(1, new UpdatePersonDto { FirstName = "Ada" });
         _validator.TestValidate(command).ShouldNotHaveAnyValidationErrors();
     }
 
     [Fact]
     public void Validate_FirstNameProvidedEmpty_HasError()
     {
-        var command = new PatchPersonCommand(1, new UpdatePersonDto("", null, null, null));
+        var command = new PatchPersonCommand(1, new UpdatePersonDto { FirstName = "" });
         _validator.TestValidate(command).ShouldHaveValidationErrorFor(c => c.Dto.FirstName);
     }
 
@@ -39,7 +39,7 @@ public class PatchPersonCommandValidatorTests
     public void Validate_DateOfBirthInFuture_HasError()
     {
         var futureDate = DateOnly.FromDateTime(DateTime.Today).AddDays(1);
-        var command = new PatchPersonCommand(1, new UpdatePersonDto(null, null, null, futureDate));
+        var command = new PatchPersonCommand(1, new UpdatePersonDto { DateOfBirth = futureDate });
 
         _validator.TestValidate(command)
             .ShouldHaveValidationErrorFor(c => c.Dto.DateOfBirth!.Value)
