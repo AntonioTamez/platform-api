@@ -85,7 +85,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Navigating to /scalar in a browser opens the Scalar interactive UI with all six endpoints documented and executable
 
 **UI hint**: yes
-**Plans**: TBD
+**Plans**: 3 plans
+
+- [ ] 04-01-PLAN.md — Api project + UpdatePersonDto record→class fix + Program.cs composition root with ProblemDetails, exception handlers, Mediator+ValidationBehavior pipeline, OpenAPI, Scalar, and DataSeeder startup (ERR-01, DOC-01, DOC-02)
+- [ ] 04-02-PLAN.md — PersonNotFoundExceptionHandler + ValidationExceptionHandler (RFC 9457) + PersonsController with six actions including JsonPatch PATCH endpoint (ERR-01, ERR-02, ERR-03)
+- [ ] 04-03-PLAN.md — PersonsAPI.Api.Tests integration suite with WebApplicationFactory<Program> covering six endpoints, 404/400 Problem Details shape, OpenAPI document, and Scalar UI (ERR-01, ERR-02, ERR-03, DOC-01, DOC-02)
 
 ## Progress
 
@@ -97,4 +101,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Domain Layer | 2/2 | Complete   | 2026-05-29 |
 | 2. Application Layer | 3/3 | Complete    | 2026-05-29 |
 | 3. Infrastructure Layer | 3/3 | Complete   | 2026-05-31 |
-| 4. API Layer | 0/TBD | Not started | - |
+| 4. API Layer | 0/3 | Not started | - |
