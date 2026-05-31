@@ -66,7 +66,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. PersonEntityConfiguration excludes the Age property from EF mapping via builder.Ignore() — no Age column or shadow property exists in the model
   3. PersonRepository implements every IPersonRepository method and returns Task<IReadOnlyList<Person>> for list queries — no IQueryable<Person> leaks beyond the repository boundary
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+- [ ] 03-01-PLAN.md — Infrastructure project + PersonDbContext + PersonEntityConfiguration (builder.Ignore Age) + PersonRepository + AddInfrastructure DI (INFRA-01)
+- [ ] 03-02-PLAN.md — Static DataSeeder.SeedAsync extension on IServiceProvider — 3 hardcoded Mexican-named persons, idempotent, NOT registered in DI (INFRA-04)
+- [ ] 03-03-PLAN.md — PersonsAPI.Infrastructure.Tests project + 5 PersonRepositoryTests (one per IPersonRepository method, isolated Guid-named InMemory DB per test)
 
 ### Phase 4: API Layer
 
@@ -92,5 +96,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Domain Layer | 2/2 | Complete   | 2026-05-29 |
 | 2. Application Layer | 3/3 | Complete    | 2026-05-29 |
-| 3. Infrastructure Layer | 0/TBD | Not started | - |
+| 3. Infrastructure Layer | 0/3 | Not started | - |
 | 4. API Layer | 0/TBD | Not started | - |
