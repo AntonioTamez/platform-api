@@ -40,7 +40,7 @@
 - [x] **INFRA-01**: EF Core InMemory provider is used as the persistence adapter — no real database required
 - [x] **INFRA-02**: Domain project has zero EF Core NuGet references — isolation enforced at .csproj level
 - [x] **INFRA-03**: IPersonRepository port interface lives in the Application layer — not in Infrastructure
-- [ ] **INFRA-04**: Application seeds 3–5 hardcoded Person records on startup for immediate manual testing
+- [x] **INFRA-04**: Application seeds 3–5 hardcoded Person records on startup for immediate manual testing
 
 ### API Documentation
 
@@ -97,7 +97,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VAL-01 | Phase 2 | Complete |
 | INFRA-03 | Phase 2 | Complete |
 | INFRA-01 | Phase 3 | Complete |
-| INFRA-04 | Phase 3 | Pending |
+| INFRA-04 | Phase 3 | Complete |
 | ERR-01 | Phase 4 | Pending |
 | ERR-02 | Phase 4 | Pending |
 | ERR-03 | Phase 4 | Pending |
