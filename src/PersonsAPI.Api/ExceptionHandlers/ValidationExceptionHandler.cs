@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
@@ -48,7 +49,11 @@ public sealed class ValidationExceptionHandler(IProblemDetailsService problemDet
             Status = StatusCodes.Status400BadRequest,
             Detail = "One or more validation errors occurred."  // D-05
         };
-        problemDetails.Extensions["errors"] = errors;
+        // Serialise to JsonElement first — this guarantees the value is a well-formed
+        // JSON object regardless of the ProblemDetails serialiser pipeline in use,
+        // including AOT/source-generation mode where Dictionary<string, string[]>
+        // stored as object? may not be registered (CR-02).
+        problemDetails.Extensions["errors"] = JsonSerializer.SerializeToElement(errors);
 
         return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {
