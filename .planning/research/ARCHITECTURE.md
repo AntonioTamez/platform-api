@@ -1,580 +1,725 @@
-# Architecture Patterns: Clean Architecture + Hexagonal Architecture in .NET 10
+# Architecture: Cloud Deployment Integration
 
-**Domain:** Learning/reference Web API — person management
-**Researched:** 2026-05-27
-**Overall confidence:** HIGH (all claims verified against official Microsoft docs, well-established community references, and authoritative .NET architecture guides)
-
----
-
-## How Clean Architecture Layers Map to Hexagonal Ports and Adapters
-
-Clean Architecture provides the layering model (rings). Hexagonal Architecture provides the port/adapter vocabulary for what lives at each boundary. Combined, each layer has a defined role:
-
-| Clean Layer | Hexagonal Role | What Lives Here |
-|-------------|---------------|-----------------|
-| Domain | Application core (innermost hexagon) | Entities, value objects, domain logic, domain events |
-| Application | Application core + port definitions | Use-case handlers, CQRS commands/queries, port interfaces (IPersonRepository, IUnitOfWork) |
-| Infrastructure | Driven/secondary adapters | EF Core DbContext, repository implementations, seeding |
-| Presentation/Api | Driving/primary adapters | Controllers, request models, DI wiring (Program.cs) |
-
-### Where Port Interfaces Live
-
-This is the most commonly misunderstood placement decision. The answer per Herberto Graca's "Explicit Architecture" (the canonical synthesis of all these patterns) and confirmed by Microsoft's DDD/CQRS eBook:
-
-**Driven port interfaces (e.g., `IPersonRepository`) live in the Application layer.**
-
-Rationale: the Application layer defines what it needs from the outside world. The interface is shaped by use-case requirements, not by the storage technology. Domain entities remain persistence-ignorant — they do not reference `IPersonRepository` at all.
-
-Domain layer holds only: entity classes, value objects, and optionally domain service interfaces that express pure business rules (e.g., `IPersonAgeCalculator` if extracted). For a simple CRUD domain like PersonsAPI, the domain contains only the `Person` entity.
-
-**Driving port interfaces** in strict Hexagonal Architecture sit in the Application layer too (e.g., `IPersonService`). However, when using MediatR, `IRequest<T>` + `IRequestHandler<TRequest, TResponse>` replace the need for explicit service interfaces — the command/query contract is the port. This is the standard .NET community approach.
+**Domain:** .NET 10 Web API — Docker + GitHub Actions + Google Cloud Run
+**Researched:** 2026-06-01
+**Confidence:** HIGH
 
 ---
 
-## Recommended Solution Structure
+## System Overview
 
-### Projects (4 total — no over-engineering)
-
-```
-PersonsAPI.sln
-src/
-  PersonsAPI.Domain/           -- Clean: Domain layer | Hexagonal: application core
-  PersonsAPI.Application/      -- Clean: Application layer | Hexagonal: core + port definitions
-  PersonsAPI.Infrastructure/   -- Clean: Infrastructure layer | Hexagonal: driven adapters
-  PersonsAPI.Api/              -- Clean: Presentation layer | Hexagonal: driving adapters
-```
-
-No shared kernel project is needed at this scope. No separate "Contracts" project — the Application project serves that role.
-
-### Project References (enforced by compiler — no circular refs possible)
+The v2.0 milestone adds five new infrastructure concerns on top of the existing four-project Clean
+Architecture solution. None of these concerns touch Domain, Application, or Infrastructure layers.
+They all attach at the outermost ring (Api layer and repository root).
 
 ```
-PersonsAPI.Domain
-  references: (nothing — zero external dependencies)
-
-PersonsAPI.Application
-  references: PersonsAPI.Domain
-
-PersonsAPI.Infrastructure
-  references: PersonsAPI.Application
-              (which transitively brings in Domain)
-
-PersonsAPI.Api
-  references: PersonsAPI.Application
-              PersonsAPI.Infrastructure
+┌─────────────────────────────────────────────────────────────────────┐
+│                      REPOSITORY ROOT (new files)                    │
+│  Dockerfile  docker-compose.yml  .dockerignore  .github/workflows/  │
+├─────────────────────────────────────────────────────────────────────┤
+│                   PersonsAPI.Api  (modified files)                  │
+│  Program.cs    appsettings.json    appsettings.Production.json      │
+│  + AddHealthChecks / MapHealthChecks                                │
+│  + UseSerilog + builder.Host.UseSerilog(...)                        │
+├─────────────────────────────────────────────────────────────────────┤
+│          PersonsAPI.Api.csproj  (new package references)            │
+│  Serilog.AspNetCore   Serilog.Sinks.Console                        │
+├─────────────────────────────────────────────────────────────────────┤
+│  PersonsAPI.Application  │  PersonsAPI.Infrastructure               │
+│  PersonsAPI.Domain       │  (UNCHANGED in v2.0)                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-The Api project references both Application and Infrastructure so it can:
-1. Call `builder.Services.AddApplication()` (registers MediatR, validators)
-2. Call `builder.Services.AddInfrastructure()` (registers DbContext, repositories)
-3. Controllers depend only on `IMediator`/`ISender` — no direct Infrastructure dependency at the code level
-
-This reference pattern is confirmed by Jason Taylor's CleanArchitecture template (Web.csproj references Application + Infrastructure) and codewithmukesh's .NET 10 guide.
-
-### Folder Layout Inside Each Project
-
-```
-PersonsAPI.Domain/
-  Entities/
-    Person.cs            -- rich domain entity, Age computed here
-
-PersonsAPI.Application/
-  Persons/
-    Commands/
-      CreatePerson/
-        CreatePersonCommand.cs
-        CreatePersonCommandHandler.cs
-      UpdatePerson/
-        UpdatePersonCommand.cs
-        UpdatePersonCommandHandler.cs
-      PatchPerson/
-        PatchPersonCommand.cs
-        PatchPersonCommandHandler.cs
-      DeletePerson/
-        DeletePersonCommand.cs
-        DeletePersonCommandHandler.cs
-    Queries/
-      GetAllPersons/
-        GetAllPersonsQuery.cs
-        GetAllPersonsQueryHandler.cs
-      GetPersonById/
-        GetPersonByIdQuery.cs
-        GetPersonByIdQueryHandler.cs
-    DTOs/
-      PersonDto.cs          -- what leaves the Application layer
-      CreatePersonRequest.cs
-      UpdatePersonRequest.cs
-      PatchPersonRequest.cs
-  Ports/                    -- driven port interfaces
-    IPersonRepository.cs
-  DependencyInjection.cs    -- AddApplication() extension method
-
-PersonsAPI.Infrastructure/
-  Persistence/
-    AppDbContext.cs          -- EF Core DbContext (scoped lifetime)
-    PersonEntityConfiguration.cs  -- Fluent API config (IEntityTypeConfiguration<Person>)
-    PersonRepository.cs      -- implements IPersonRepository
-    DataSeeder.cs            -- seeds in-memory data
-  DependencyInjection.cs     -- AddInfrastructure() extension method
-
-PersonsAPI.Api/
-  Controllers/
-    PersonsController.cs     -- driving adapter, uses ISender
-  Program.cs                 -- DI composition root, UseInfrastructure + UseApplication
-```
+Key architectural principle: all cloud-readiness changes are confined to the composition root
+(`Program.cs`), configuration files (`appsettings.json`), and new files at the repository root.
+No domain, application, or infrastructure code changes.
 
 ---
 
-## How EF Core Fits as a Driven Adapter Without Leaking Into the Domain
+## New Files vs. Modified Files
 
-### The Core Rule
+### New Files (do not exist yet)
 
-The `Person` domain entity must be a plain C# class with no EF attributes, no `[Key]`, no `[Column]` — nothing from `Microsoft.EntityFrameworkCore`. This is the Persistence Ignorance principle.
+| File | Location | Purpose |
+|------|----------|---------|
+| `Dockerfile` | repository root (`/`) | Multi-stage build: SDK build stage + aspnet runtime stage |
+| `docker-compose.yml` | repository root (`/`) | Local development with container-equivalent env |
+| `.dockerignore` | repository root (`/`) | Exclude `bin/`, `obj/`, `.planning/`, `tests/`, `.git/` from build context |
+| `.github/workflows/deploy.yml` | `.github/workflows/` | CI/CD pipeline: build → test → push → deploy |
+| `src/PersonsAPI.Api/appsettings.Production.json` | `src/PersonsAPI.Api/` | Production-specific config (Serilog JSON sink, no dev middleware) |
 
-EF Core is configured entirely through Fluent API in the Infrastructure layer via `IEntityTypeConfiguration<Person>`. The domain entity never references EF.
+### Modified Files (already exist)
 
-### What Lives Where
+| File | What Changes |
+|------|-------------|
+| `src/PersonsAPI.Api/Program.cs` | Add `AddHealthChecks()`, `MapHealthChecks("/health")`, `UseSerilog()` |
+| `src/PersonsAPI.Api/appsettings.json` | Add `Serilog` section with console sink (human-readable for dev) |
+| `src/PersonsAPI.Api/PersonsAPI.Api.csproj` | Add `Serilog.AspNetCore` and `Serilog.Sinks.Console` PackageReferences |
 
-**Domain — Person entity (persistence-ignorant):**
-```csharp
-// PersonsAPI.Domain/Entities/Person.cs
-public class Person
-{
-    public Guid Id { get; private set; }
-    public string FirstName { get; private set; }
-    public string PaternalLastName { get; private set; }
-    public string MaternalLastName { get; private set; }
-    public DateOnly DateOfBirth { get; private set; }
+### Files That Do NOT Change
 
-    public int Age => CalculateAge(DateOfBirth);  // computed — never stored
+All files in `PersonsAPI.Domain/`, `PersonsAPI.Application/`, `PersonsAPI.Infrastructure/`,
+and all test projects remain untouched. v2.0 is purely an infrastructure/deployment concern.
 
-    protected Person() { }  // required by EF Core for materialization
+---
 
-    public Person(string firstName, string paternalLastName,
-                  string maternalLastName, DateOnly dateOfBirth)
-    {
-        Id = Guid.NewGuid();
-        FirstName = firstName;
-        PaternalLastName = paternalLastName;
-        MaternalLastName = maternalLastName;
-        DateOfBirth = dateOfBirth;
-    }
+## Dockerfile Integration
 
-    private static int CalculateAge(DateOnly dob)
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var age = today.Year - dob.Year;
-        if (dob > today.AddYears(-age)) age--;
-        return age;
-    }
+### Location and Build Context
 
-    public void Update(string firstName, string paternalLastName,
-                       string maternalLastName, DateOnly dateOfBirth)
-    {
-        FirstName = firstName;
-        PaternalLastName = paternalLastName;
-        MaternalLastName = maternalLastName;
-        DateOfBirth = dateOfBirth;
-    }
-}
+The `Dockerfile` lives at the repository root. The `docker build` command is run from the
+repository root with `.` as the build context. This is the correct placement for a solution with
+`PersonsAPI.sln` at the root — it lets `COPY` commands reach all four `src/` projects and the
+solution file in a single build context.
+
+**Do not place the Dockerfile inside `src/PersonsAPI.Api/`** — that directory does not contain the
+solution file or the other three project directories, so `dotnet restore PersonsAPI.sln` would fail.
+
+### Multi-Stage Build: COPY Order for Four Projects
+
+The key insight for multi-project solutions is: copy all `.csproj` files first (one COPY per
+project), then run `dotnet restore`. This makes dependency restore a cacheable Docker layer — if
+no `.csproj` files change, the restore layer is reused on every subsequent build. Only then copy
+full source.
+
+The four source projects and their relative paths from the repository root:
+
+```
+src/PersonsAPI.Domain/PersonsAPI.Domain.csproj
+src/PersonsAPI.Application/PersonsAPI.Application.csproj
+src/PersonsAPI.Infrastructure/PersonsAPI.Infrastructure.csproj
+src/PersonsAPI.Api/PersonsAPI.Api.csproj
 ```
 
-**Infrastructure — EF configuration (keeps EF out of domain):**
-```csharp
-// PersonsAPI.Infrastructure/Persistence/PersonEntityConfiguration.cs
-public class PersonEntityConfiguration : IEntityTypeConfiguration<Person>
-{
-    public void Configure(EntityTypeBuilder<Person> builder)
-    {
-        builder.HasKey(p => p.Id);
-        builder.Property(p => p.FirstName).IsRequired().HasMaxLength(100);
-        builder.Property(p => p.PaternalLastName).IsRequired().HasMaxLength(100);
-        builder.Property(p => p.MaternalLastName).IsRequired().HasMaxLength(100);
-        builder.Property(p => p.DateOfBirth).IsRequired();
-        builder.Ignore(p => p.Age);  // computed — do not persist
-    }
-}
+Test projects are excluded from the production image — only `src/` is published, not `tests/`.
+
+### Recommended Dockerfile
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+# Stage 1: build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /source
+
+# Copy solution file
+COPY PersonsAPI.sln .
+
+# Copy each project file individually for layer-cached restore
+COPY src/PersonsAPI.Domain/PersonsAPI.Domain.csproj             src/PersonsAPI.Domain/
+COPY src/PersonsAPI.Application/PersonsAPI.Application.csproj   src/PersonsAPI.Application/
+COPY src/PersonsAPI.Infrastructure/PersonsAPI.Infrastructure.csproj src/PersonsAPI.Infrastructure/
+COPY src/PersonsAPI.Api/PersonsAPI.Api.csproj                   src/PersonsAPI.Api/
+
+# Restore using the solution — resolves all inter-project references
+RUN dotnet restore PersonsAPI.sln
+
+# Copy full source (only src/ — not tests/)
+COPY src/ src/
+
+# Publish the Api project
+RUN dotnet publish src/PersonsAPI.Api/PersonsAPI.Api.csproj \
+    -c Release -o /app/publish --no-restore
+
+# Stage 2: runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+
+# Cloud Run injects PORT; ASP.NET Core reads ASPNETCORE_HTTP_PORTS or ASPNETCORE_URLS
+ENV ASPNETCORE_URLS=http://+:${PORT:-8080}
+
+EXPOSE 8080
+
+ENTRYPOINT ["dotnet", "PersonsAPI.Api.dll"]
 ```
 
-**Infrastructure — DbContext:**
-```csharp
-// PersonsAPI.Infrastructure/Persistence/AppDbContext.cs
-public class AppDbContext : DbContext
-{
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+**Why `dotnet restore PersonsAPI.sln` (not `dotnet restore src/PersonsAPI.Api/...`):**
+The solution-level restore resolves all ProjectReference dependencies in one pass. Restoring only
+the Api `.csproj` would also work (it transitively pulls all dependencies), but using the solution
+file is more explicit and matches what CI tooling runs.
 
-    public DbSet<Person> Persons => Set<Person>();
+**Why copy test projects are excluded:**
+Test assemblies (xUnit, test adapters) would inflate the image by ~50 MB and have no function at
+runtime. The build stage produces a self-contained publish output from `src/` only.
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
-}
+### .dockerignore
+
+Prevents unnecessary files from entering the build context, which speeds up `docker build` and
+avoids accidentally embedding secrets or planning artifacts in the image:
+
 ```
-
-**Application — driven port (what the application layer needs):**
-```csharp
-// PersonsAPI.Application/Ports/IPersonRepository.cs
-public interface IPersonRepository
-{
-    Task<IReadOnlyList<Person>> GetAllAsync(CancellationToken ct = default);
-    Task<Person?> GetByIdAsync(Guid id, CancellationToken ct = default);
-    Task AddAsync(Person person, CancellationToken ct = default);
-    Task UpdateAsync(Person person, CancellationToken ct = default);
-    Task DeleteAsync(Person person, CancellationToken ct = default);
-    Task<int> SaveChangesAsync(CancellationToken ct = default);
-}
-```
-
-**Infrastructure — driven adapter (implements the port):**
-```csharp
-// PersonsAPI.Infrastructure/Persistence/PersonRepository.cs
-public class PersonRepository : IPersonRepository
-{
-    private readonly AppDbContext _context;
-
-    public PersonRepository(AppDbContext context) => _context = context;
-
-    public async Task<IReadOnlyList<Person>> GetAllAsync(CancellationToken ct = default)
-        => await _context.Persons.ToListAsync(ct);
-
-    public async Task<Person?> GetByIdAsync(Guid id, CancellationToken ct = default)
-        => await _context.Persons.FindAsync([id], ct);
-
-    public async Task AddAsync(Person person, CancellationToken ct = default)
-        => await _context.Persons.AddAsync(person, ct);
-
-    public Task UpdateAsync(Person person, CancellationToken ct = default)
-    {
-        _context.Persons.Update(person);
-        return Task.CompletedTask;
-    }
-
-    public Task DeleteAsync(Person person, CancellationToken ct = default)
-    {
-        _context.Persons.Remove(person);
-        return Task.CompletedTask;
-    }
-
-    public Task<int> SaveChangesAsync(CancellationToken ct = default)
-        => _context.SaveChangesAsync(ct);
-}
+**/bin/
+**/obj/
+**/.git/
+.planning/
+tests/
+*.md
+.github/
 ```
 
 ---
 
-## Where DTOs vs Domain Entities Live
+## Cloud Run Port Binding
 
-| Artifact | Layer | Reasoning |
-|----------|-------|-----------|
-| `Person` (domain entity) | Domain | Pure business object. Never crosses the API boundary. |
-| `PersonDto` (response) | Application | Shapes what handlers return. Controller maps or returns directly. |
-| `CreatePersonRequest` | Application | Input contract for create command. |
-| `UpdatePersonRequest` | Application | Input contract for full update. |
-| `PatchPersonRequest` | Application | Input contract for partial update. |
+### How Cloud Run Injects PORT
 
-**Rule:** Controllers in the Presentation layer receive and return Application DTOs. They never touch domain entities directly. Domain entities only cross Application layer boundaries when being passed to repository calls.
+Google Cloud Run injects a `PORT` environment variable into every container at startup. The
+container must listen on that port — Cloud Run's load balancer routes to it. The default value
+Cloud Run injects is `8080`, but containers must not hardcode this; they must read `PORT`.
 
-**Mapping location:** Inside command/query handlers. The handler receives a command (DTO input), creates or fetches a domain entity, performs business operations, then maps the result entity to a DTO for return. No AutoMapper required at this scale — explicit mapping in the handler is clearer.
+If the container does not accept connections on the PORT Cloud Run specified, health checks fail
+and the revision is marked unhealthy. The deployment rolls back.
+
+### How ASP.NET Core 10 Reads PORT
+
+ASP.NET Core resolves its listening URL from (in priority order):
+1. `ASPNETCORE_URLS` environment variable — full URL format (`http://+:8080`)
+2. `ASPNETCORE_HTTP_PORTS` environment variable — port number only (`8080`)
+3. Default: `http://localhost:5000;https://localhost:5001` (development only)
+
+In a container, `ASPNETCORE_URLS` is the correct variable to set. The value must include the
+protocol prefix:
+
+```
+ASPNETCORE_URLS=http://+:8080
+```
+
+The `+` wildcard binds to all interfaces (required in a container — `localhost` would refuse
+external connections).
+
+**Cloud Run pattern — read PORT dynamically:**
+
+Option A (Dockerfile ENV with shell-form default):
+```dockerfile
+ENV ASPNETCORE_URLS=http://+:${PORT:-8080}
+```
+This sets a default at image build time. At runtime, Cloud Run overrides `PORT`, and the container
+startup script expands it. However, Docker `ENV` does not support variable expansion with a
+`${VAR:-default}` syntax in all runtimes — this depends on the shell.
+
+Option B (Program.cs — recommended, most explicit):
+```csharp
+// In Program.cs, before WebApplication.CreateBuilder
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://+:{port}");
+```
+This is the most reliable pattern for Cloud Run + ASP.NET Core. It reads `PORT` directly from the
+environment at startup and configures Kestrel programmatically. No shell expansion required.
+
+**Recommended approach: Option B** — add `UseUrls` from PORT in `Program.cs`. This is explicit,
+testable, and works identically in docker-compose, Cloud Run, and local runs with `PORT=5000`.
+
+**HTTPS redirection:** Remove or skip `app.UseHttpsRedirection()` in the container. Cloud Run
+handles TLS termination at the load balancer. The container only needs HTTP. In `Program.cs`,
+guard it:
 
 ```csharp
-// Mapping stays inside the handler
-private static PersonDto ToDto(Person p) => new(
-    p.Id, p.FirstName, p.PaternalLastName, p.MaternalLastName, p.DateOfBirth, p.Age);
+if (!app.Environment.IsProduction())
+    app.UseHttpsRedirection();
 ```
+
+### Environment Variables Cloud Run Sets
+
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `PORT` | `8080` (default, configurable) | Container must listen here |
+| `K_SERVICE` | Cloud Run service name | Can detect Cloud Run environment |
+| `K_REVISION` | Revision name | Useful for log correlation |
+| `K_CONFIGURATION` | Configuration name | |
+| `ASPNETCORE_ENVIRONMENT` | Set by deployment workflow | Set to `Production` in gcloud deploy |
+
+The `ASPNETCORE_ENVIRONMENT=Production` variable must be set explicitly in the deployment
+command or Cloud Run service configuration — Cloud Run does not set it automatically.
 
 ---
 
-## How MediatR Fits with Hexagonal Ports
+## Health Check Integration in Program.cs
 
-MediatR is registered in the Application layer and replaces the need for explicit driving port service interfaces. The CQRS command/query objects become the port contracts.
+### Registration Pattern
 
-### Driving side (primary adapter — Controller)
-
-The controller is the driving adapter. It:
-1. Receives an HTTP request
-2. Maps it to a command or query (Application layer type)
-3. Sends it via `ISender.Send()` — this is the only dependency the controller needs
+ASP.NET Core's built-in health check middleware requires no NuGet package — it ships with the
+framework. The registration is two lines in `Program.cs`:
 
 ```csharp
-// PersonsAPI.Api/Controllers/PersonsController.cs
-[ApiController]
-[Route("api/[controller]")]
-public class PersonsController : ControllerBase
-{
-    private readonly ISender _sender;
+// In the services section (before builder.Build())
+builder.Services.AddHealthChecks();
 
-    public PersonsController(ISender sender) => _sender = sender;
-
-    [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<PersonDto>>> GetAll(CancellationToken ct)
-        => Ok(await _sender.Send(new GetAllPersonsQuery(), ct));
-
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<PersonDto>> GetById(Guid id, CancellationToken ct)
-    {
-        var result = await _sender.Send(new GetPersonByIdQuery(id), ct);
-        return result is null ? NotFound() : Ok(result);
-    }
-
-    [HttpPost]
-    public async Task<ActionResult<PersonDto>> Create(
-        CreatePersonRequest request, CancellationToken ct)
-    {
-        var dto = await _sender.Send(new CreatePersonCommand(request), ct);
-        return CreatedAtAction(nameof(GetById), new { id = dto.Id }, dto);
-    }
-
-    [HttpPut("{id:guid}")]
-    public async Task<ActionResult<PersonDto>> Update(
-        Guid id, UpdatePersonRequest request, CancellationToken ct)
-    {
-        var result = await _sender.Send(new UpdatePersonCommand(id, request), ct);
-        return result is null ? NotFound() : Ok(result);
-    }
-
-    [HttpPatch("{id:guid}")]
-    public async Task<ActionResult<PersonDto>> Patch(
-        Guid id, PatchPersonRequest request, CancellationToken ct)
-    {
-        var result = await _sender.Send(new PatchPersonCommand(id, request), ct);
-        return result is null ? NotFound() : Ok(result);
-    }
-
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
-    {
-        var found = await _sender.Send(new DeletePersonCommand(id), ct);
-        return found ? NoContent() : NotFound();
-    }
-}
+// In the middleware section (after builder.Build())
+app.MapHealthChecks("/health");
 ```
 
-### Handler as use-case coordinator (Application layer)
+### Insertion Point in Existing Program.cs
+
+Current `Program.cs` structure with insertion points marked:
 
 ```csharp
-// PersonsAPI.Application/Persons/Commands/CreatePerson/CreatePersonCommandHandler.cs
-public record CreatePersonCommand(CreatePersonRequest Request) : IRequest<PersonDto>;
+var builder = WebApplication.CreateBuilder(args);
 
-public class CreatePersonCommandHandler : IRequestHandler<CreatePersonCommand, PersonDto>
-{
-    private readonly IPersonRepository _repo;
+// === PORT BINDING (new) ===
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://+:{port}");
 
-    public CreatePersonCommandHandler(IPersonRepository repo) => _repo = repo;
+// === SERILOG (new — before other services) ===
+builder.Host.UseSerilog((context, services, configuration) =>
+    configuration.ReadFrom.Configuration(context.Configuration));
 
-    public async Task<PersonDto> Handle(CreatePersonCommand cmd, CancellationToken ct)
-    {
-        var r = cmd.Request;
-        var person = new Person(r.FirstName, r.PaternalLastName, r.MaternalLastName, r.DateOfBirth);
-        await _repo.AddAsync(person, ct);
-        await _repo.SaveChangesAsync(ct);
-        return ToDto(person);
-    }
-
-    private static PersonDto ToDto(Person p) =>
-        new(p.Id, p.FirstName, p.PaternalLastName, p.MaternalLastName, p.DateOfBirth, p.Age);
-}
-```
-
-### MediatR Registration
-
-```csharp
-// PersonsAPI.Application/DependencyInjection.cs
-public static class DependencyInjection
-{
-    public static IServiceCollection AddApplication(this IServiceCollection services)
-    {
-        services.AddMediatR(cfg =>
-            cfg.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly));
-        return services;
-    }
-}
-
-// PersonsAPI.Infrastructure/DependencyInjection.cs
-public static class DependencyInjection
-{
-    public static IServiceCollection AddInfrastructure(
-        this IServiceCollection services, IConfiguration configuration)
-    {
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseInMemoryDatabase("PersonsDb"));
-
-        services.AddScoped<IPersonRepository, PersonRepository>();
-
-        return services;
-    }
-}
-
-// PersonsAPI.Api/Program.cs
-builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<PersonNotFoundExceptionHandler>();
+builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+builder.Services.AddOpenApi();
+builder.Services.AddMediator(options => { ... });
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure();
+
+// === HEALTH CHECKS (new) ===
+builder.Services.AddHealthChecks();
+
+var app = builder.Build();
+
+app.UseExceptionHandler();
+
+// === HTTPS GUARD (modified) ===
+if (!app.Environment.IsProduction())
+    app.UseHttpsRedirection();
+
+app.MapControllers();
+app.MapOpenApi();
+app.MapScalarApiReference();
+
+// === HEALTH ENDPOINT (new) ===
+app.MapHealthChecks("/health");
+
+await app.Services.SeedAsync();
+await app.RunAsync();
+```
+
+### What `/health` Returns
+
+- **Response body:** `Healthy` (plain text string)
+- **Content-Type:** `text/plain`
+- **Status 200 OK** when healthy
+- **Status 503 Service Unavailable** when unhealthy
+
+Cloud Run's liveness and startup probes accept HTTP 200 as healthy. The `/health` endpoint
+satisfies this out of the box with no custom response writer needed.
+
+The EF Core InMemory provider has no real connection to check, so the default no-checks
+`AddHealthChecks()` is correct for v2.0. If a real database is added in v2.1+, register
+`AddDbContextCheck<AppDbContext>()` to probe it.
+
+---
+
+## Serilog Integration
+
+### Packages Required (in PersonsAPI.Api.csproj)
+
+```xml
+<PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+```
+
+`Serilog.AspNetCore` is the integration package. It includes `Serilog.Extensions.Hosting` and
+the `UseSerilog` extension on `IHostBuilder`. `Serilog.Sinks.Console` provides the console
+output sink. No additional sink package is needed for Google Cloud Logging — GCP reads stdout/stderr
+from the container and routes it automatically. JSON format on stdout is all that is required.
+
+### Program.cs Changes
+
+Replace the default Microsoft logging with Serilog's bootstrap-then-configure pattern:
+
+```csharp
+// At the very top of Program.cs — bootstrap logger captures startup failures
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
+try
+{
+    var builder = WebApplication.CreateBuilder(args);
+
+    var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+    builder.WebHost.UseUrls($"http://+:{port}");
+
+    // Replace default logging with Serilog, configured from appsettings.json
+    builder.Host.UseSerilog((context, services, configuration) =>
+        configuration.ReadFrom.Configuration(context.Configuration)
+                     .ReadFrom.Services(services));
+
+    // ... rest of service registration ...
+
+    var app = builder.Build();
+
+    // ... rest of middleware ...
+
+    await app.Services.SeedAsync();
+    await app.RunAsync();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application startup failed");
+    return 1;
+}
+finally
+{
+    await Log.CloseAndFlushAsync();
+}
+
+public partial class Program { }
+```
+
+The bootstrap logger (`Log.Logger = new LoggerConfiguration()...CreateBootstrapLogger()`) captures
+any exception that occurs before the host is built. Once the host is built, `UseSerilog` replaces
+it with the fully configured Serilog logger that reads from `appsettings.json`.
+
+**The `public partial class Program { }` declaration must remain** — it is required by
+`WebApplicationFactory<Program>` in the integration tests. Place it after the top-level statements.
+
+### appsettings.json Changes
+
+Add a `Serilog` section. The console sink uses plain text format in development:
+
+```json
+{
+  "Serilog": {
+    "Using": ["Serilog.Sinks.Console"],
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft.AspNetCore": "Warning",
+        "Microsoft.EntityFrameworkCore": "Warning"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "Console",
+        "Args": {
+          "outputTemplate": "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"
+        }
+      }
+    ],
+    "Enrich": ["FromLogContext", "WithMachineName"]
+  },
+  "AllowedHosts": "*"
+}
+```
+
+Remove the existing `Logging` section — Serilog replaces it entirely. The `Microsoft.Extensions.Logging`
+abstraction still works through Serilog's `ILogger<T>` bridge; nothing in existing code changes.
+
+### appsettings.Production.json (new file)
+
+In production (Cloud Run), override the console sink to emit JSON format — the format Google Cloud
+Logging expects for structured log parsing:
+
+```json
+{
+  "Serilog": {
+    "WriteTo": [
+      {
+        "Name": "Console",
+        "Args": {
+          "formatter": "Serilog.Formatting.Json.JsonFormatter, Serilog"
+        }
+      }
+    ]
+  }
+}
+```
+
+When `ASPNETCORE_ENVIRONMENT=Production`, ASP.NET Core loads `appsettings.json` then merges
+`appsettings.Production.json` on top. The Production override switches the console sink from
+human-readable to JSON without any code change.
+
+**Why not a Google-specific sink?** Google Cloud Logging automatically ingests stdout/stderr from
+Cloud Run containers. JSON-formatted lines on stdout are parsed into structured log entries with
+severity mapping. No `Serilog.Sinks.GoogleCloudLogging` package is needed — that sink is for
+direct API ingestion, which adds latency and a service account dependency. Stdout JSON is the
+recommended pattern for Cloud Run.
+
+---
+
+## docker-compose.yml Integration
+
+docker-compose provides local development parity with the Cloud Run environment. It builds from the
+same Dockerfile and injects the same environment variables Cloud Run sets:
+
+```yaml
+version: "3.9"
+
+services:
+  personsapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ASPNETCORE_ENVIRONMENT=Production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+```
+
+Running `docker-compose up` locally builds the production image and starts the API on port 8080
+with JSON logging — exactly what Cloud Run runs. The `healthcheck` mirrors Cloud Run's probe.
+
+---
+
+## GitHub Actions Workflow Integration
+
+### File Location
+
+```
+.github/
+  workflows/
+    deploy.yml
+```
+
+The `.github/` directory does not yet exist in the repository. It must be created at the repository
+root alongside `PersonsAPI.sln`.
+
+### Pipeline Structure
+
+The workflow has three jobs in sequence:
+
+```
+build-and-test → push-image → deploy-to-cloud-run
+```
+
+**Job 1 — build-and-test:**
+- Checks out code
+- Sets up .NET 10 SDK
+- Runs `dotnet restore PersonsAPI.sln`
+- Runs `dotnet build PersonsAPI.sln -c Release --no-restore`
+- Runs `dotnet test PersonsAPI.sln --no-build` (all 4 test projects)
+
+**Job 2 — push-image (depends on build-and-test):**
+- Authenticates to GCP via Workload Identity Federation (preferred) or service account key
+- Configures Docker for `REGION-docker.pkg.dev`
+- Builds Docker image with `docker/build-push-action`
+- Tags image: `REGION-docker.pkg.dev/PROJECT/REPOSITORY/persons-api:${{ github.sha }}`
+- Pushes to Google Artifact Registry
+
+**Job 3 — deploy-to-cloud-run (depends on push-image):**
+- Uses `google-github-actions/deploy-cloudrun@v2`
+- Sets `ASPNETCORE_ENVIRONMENT=Production`
+- Sets Cloud Run service name, region, image URL
+- Configures port (matches `PORT` default)
+
+### Workflow YAML Skeleton
+
+```yaml
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [master]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  REPOSITORY: persons-api
+  SERVICE: persons-api
+  IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/persons-api/persons-api
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+      - run: dotnet restore PersonsAPI.sln
+      - run: dotnet build PersonsAPI.sln -c Release --no-restore
+      - run: dotnet test PersonsAPI.sln --no-build -c Release
+
+  push-image:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # Required for Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }},${{ env.IMAGE }}:latest
+
+  deploy-to-cloud-run:
+    needs: push-image
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.IMAGE }}:${{ github.sha }}
+          env_vars: |
+            ASPNETCORE_ENVIRONMENT=Production
+```
+
+### GitHub Secrets Required
+
+| Secret | Value |
+|--------|-------|
+| `GCP_PROJECT_ID` | GCP project ID |
+| `WIF_PROVIDER` | Workload Identity Federation provider resource name |
+| `WIF_SERVICE_ACCOUNT` | Service account email for Workload Identity |
+
+Workload Identity Federation is preferred over a service account JSON key stored in secrets —
+it is keyless, does not expire, and follows GCP security best practices.
+
+---
+
+## Integration Points: Exact Changes to Existing Files
+
+### Program.cs — delta summary
+
+| Location | Change |
+|----------|--------|
+| Before `var builder = ...` | Add bootstrap `Log.Logger` |
+| After `var builder = ...` | Add `UseUrls` from `PORT` env var |
+| After `builder = ...` | Add `builder.Host.UseSerilog(...)` |
+| Services section | Add `builder.Services.AddHealthChecks()` |
+| Middleware section | Guard `UseHttpsRedirection` with `!IsProduction()` |
+| Endpoint registration | Add `app.MapHealthChecks("/health")` |
+| Wrap all in try/catch/finally | Flush Serilog on exit |
+
+### PersonsAPI.Api.csproj — delta summary
+
+```xml
+<!-- Add to existing ItemGroup -->
+<PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+```
+
+### appsettings.json — delta summary
+
+- Remove `Logging` section (replaced by Serilog)
+- Add `Serilog` section with console sink (human-readable format)
+- Keep `AllowedHosts`
+
+### appsettings.Development.json — delta summary
+
+- Remove `Logging` section (was overriding EF Core log level)
+- Optionally add `Serilog.MinimumLevel.Override.Microsoft.EntityFrameworkCore: Information`
+  inside the `Serilog` section instead
+
+---
+
+## Component Boundaries: What the New Files Touch
+
+| New File | Touches | Does Not Touch |
+|----------|---------|----------------|
+| `Dockerfile` | Builds all 4 src/ projects, publishes Api | No runtime code changes |
+| `docker-compose.yml` | Runs the container image | No source code |
+| `.dockerignore` | Controls build context | No source code |
+| `.github/workflows/deploy.yml` | Runs dotnet test (reads all 4 test projects) | No source code |
+| `appsettings.Production.json` | Overrides Serilog sink format | No code logic |
+| `Program.cs` changes | Api layer only (composition root) | Domain, Application, Infrastructure |
+| `PersonsAPI.Api.csproj` changes | Api layer NuGet refs | Other project files |
+
+Domain, Application, and Infrastructure projects have zero changes in v2.0.
+
+---
+
+## Data Flow: Request Through Cloud Run
+
+```
+HTTPS client
+  → Cloud Run load balancer (TLS termination)
+  → Container HTTP :8080
+  → Kestrel (reads PORT env var)
+  → PersonsAPI.Api middleware pipeline
+      UseExceptionHandler
+      MapControllers → PersonsController → ISender
+      MapHealthChecks("/health") → 200 Healthy
+  → Serilog writes JSON to stdout
+  → Cloud Run captures stdout
+  → Google Cloud Logging ingests structured log entry
 ```
 
 ---
 
-## Dependency Inversion: Wiring in the API Project
+## Anti-Patterns
 
-The Composition Root is `Program.cs` in the Api project. This is the only place where concrete implementations are linked to their interfaces.
+### Anti-Pattern 1: Dockerfile inside src/PersonsAPI.Api/
 
-The Api project references both Application and Infrastructure for this reason: it needs to call `AddInfrastructure()` which registers `AppDbContext` and `PersonRepository : IPersonRepository`. At runtime, when MediatR dispatches a command to a handler, the handler receives `IPersonRepository` — which resolves to `PersonRepository` — which uses `AppDbContext` with InMemory. The handler has no idea EF Core exists.
+**What goes wrong:** The Api project directory contains only one project. `COPY PersonsAPI.sln .`
+fails because the solution file is at the repository root. `dotnet restore` cannot resolve
+ProjectReferences to the other three projects.
 
-The dependency graph at runtime:
+**Do this instead:** Dockerfile at the repository root. Build context is `.` (repo root).
 
-```
-HTTP Request
-  → PersonsController (ISender)
-    → MediatR (IMediator — wired in Application)
-      → CreatePersonCommandHandler
-          → IPersonRepository  ← resolved to PersonRepository (Infrastructure)
-              → AppDbContext    ← UseInMemoryDatabase (Infrastructure)
-                  → Person      ← Domain entity (persisted via EF, no EF knowledge in entity)
-```
+### Anti-Pattern 2: Single COPY for all source, then restore
 
-No layer calls upward. No layer skips a layer. Domain never sees EF or MediatR.
+**What goes wrong:** `COPY . .` then `dotnet restore` defeats Docker layer caching. Every change
+to any `.cs` file invalidates the restore layer, causing full NuGet restore on every build (slow,
+bandwidth-expensive in CI).
 
----
+**Do this instead:** Copy `.csproj` files individually first, run `dotnet restore`, then copy
+full source. The restore layer is only invalidated when a `.csproj` changes.
 
-## Suggested Build Order
+### Anti-Pattern 3: Hardcoding port 8080 in ASPNETCORE_URLS
 
-Build order that guarantees no circular dependency can emerge:
+**What goes wrong:** Cloud Run can be configured to use a different port. Hardcoding breaks
+portability.
 
-### Phase 1 — Domain
-Build `PersonsAPI.Domain` first. No project references. Contains only the `Person` entity with rich logic and computed `Age`. Verifiable standalone: the entity compiles with zero external dependencies.
+**Do this instead:** `var port = Environment.GetEnvironmentVariable("PORT") ?? "8080"` in
+`Program.cs`. The fallback `8080` matches Cloud Run's default, so local docker-compose also works
+without setting `PORT`.
 
-### Phase 2 — Application
-Build `PersonsAPI.Application`. References only Domain. Contains:
-- `IPersonRepository` port interface
-- All CQRS command/query records and handler skeletons
-- All DTO types (PersonDto, CreatePersonRequest, etc.)
-- `DependencyInjection.cs` (AddApplication)
-- MediatR NuGet package reference here
+### Anti-Pattern 4: UseHttpsRedirection in a Cloud Run container
 
-If Application compiles, it proves domain is clean.
+**What goes wrong:** Cloud Run terminates TLS at the load balancer. The container receives plain
+HTTP. `UseHttpsRedirection` sends a redirect from HTTP to HTTPS — but the container has no HTTPS
+listener. Requests loop or fail.
 
-### Phase 3 — Infrastructure
-Build `PersonsAPI.Infrastructure`. References Application. Contains:
-- `AppDbContext` (EF Core InMemory)
-- `PersonEntityConfiguration` (Fluent API)
-- `PersonRepository` implementing `IPersonRepository`
-- `DataSeeder` for startup seed data
-- `DependencyInjection.cs` (AddInfrastructure)
-- EF Core InMemory NuGet packages reference here
+**Do this instead:** Guard with `if (!app.Environment.IsProduction()) app.UseHttpsRedirection()`.
 
-If Infrastructure compiles with no Domain import of EF types, the boundary is intact.
+### Anti-Pattern 5: ASPNETCORE_ENVIRONMENT not set in Cloud Run deployment
 
-### Phase 4 — Api
-Build `PersonsAPI.Api` last. References Application + Infrastructure. Contains:
-- `PersonsController`
-- `Program.cs` composition root
+**What goes wrong:** Without `ASPNETCORE_ENVIRONMENT=Production`, the app defaults to the
+`appsettings.Development.json` overrides and may load developer exception pages, verbose EF logs,
+or human-readable Serilog output instead of JSON.
 
-### Build Order Summary
+**Do this instead:** Set `ASPNETCORE_ENVIRONMENT=Production` as an environment variable in the
+`gcloud run deploy` command or the GitHub Actions deployment step.
 
-```
-1. PersonsAPI.Domain         (zero deps)
-2. PersonsAPI.Application    (refs Domain)
-3. PersonsAPI.Infrastructure (refs Application)
-4. PersonsAPI.Api            (refs Application + Infrastructure)
-```
+### Anti-Pattern 6: Storing service account JSON in GitHub Secrets
 
-This order eliminates circular references by design. If a developer accidentally tries to reference Infrastructure from Application, the project reference would create a cycle and the solution would fail to load.
+**What goes wrong:** JSON key files expire, can be leaked, and require manual rotation.
 
----
-
-## Component Boundaries and Data Flow
-
-### Request lifecycle (write path — create)
-
-```
-[HTTP POST /api/persons]
-  → PersonsController.Create(CreatePersonRequest)
-  → new CreatePersonCommand(request)        [Application DTO]
-  → ISender.Send(command)
-  → CreatePersonCommandHandler.Handle()
-     → new Person(...)                      [Domain entity created]
-     → IPersonRepository.AddAsync(person)
-     → IPersonRepository.SaveChangesAsync()
-        → PersonRepository (Infrastructure)
-           → AppDbContext.Persons.AddAsync()
-           → AppDbContext.SaveChangesAsync()
-     → ToDto(person)                        [Domain → Application DTO]
-  → return PersonDto
-  → 201 Created + PersonDto body
-```
-
-### Request lifecycle (read path — get all)
-
-```
-[HTTP GET /api/persons]
-  → PersonsController.GetAll()
-  → new GetAllPersonsQuery()
-  → ISender.Send(query)
-  → GetAllPersonsQueryHandler.Handle()
-     → IPersonRepository.GetAllAsync()
-        → PersonRepository (Infrastructure)
-           → AppDbContext.Persons.ToListAsync()
-     → persons.Select(ToDto)               [Domain → Application DTOs]
-  → return IReadOnlyList<PersonDto>
-  → 200 OK + array body
-```
-
-### Data flow rules (explicit)
-
-- Domain entities flow: Domain → Application (inside handlers only)
-- DTOs flow: Application → Api (controller responses)
-- HTTP models: Api controller method parameters → Application command/query constructors
-- EF types (DbContext, DbSet): Infrastructure only — never cross into Application or Domain
-- MediatR types (IRequest, IRequestHandler): Application only — never in Domain
-
----
-
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: Repository interface in Domain
-**What goes wrong:** Domain project references a repository interface, forcing Infrastructure (which implements it) to reference Domain. This works structurally but mixes concerns — domain entities should not "know" they are being persisted.
-**Correct:** Repository interfaces belong in Application, shaping what the use cases need.
-
-### Anti-Pattern 2: Returning domain entities from handlers
-**What goes wrong:** Domain entities leak to the API surface. Callers can mutate internal state; computed properties (Age) may serialize unexpectedly; breaking changes to the entity break the API contract.
-**Correct:** Handlers always return DTOs. Map inside the handler.
-
-### Anti-Pattern 3: EF attributes on domain entity
-**What goes wrong:** `[Key]`, `[Column]`, `[Required]` attributes create a hard dependency on `Microsoft.EntityFrameworkCore` in the Domain project.
-**Correct:** Use Fluent API in `IEntityTypeConfiguration<Person>` inside Infrastructure. Domain entity stays attribute-free.
-
-### Anti-Pattern 4: Injecting AppDbContext into Application handlers
-**What goes wrong:** Application layer takes a hard dependency on the EF Core DbContext, coupling use cases to a specific ORM.
-**Correct:** Inject `IPersonRepository` (port). The repository implementation (Infrastructure) owns the DbContext.
-
-### Anti-Pattern 5: Controller logic
-**What goes wrong:** Business validation, entity creation, or mapping logic placed in the controller rather than in the command handler.
-**Correct:** Controllers are thin routing adapters. All logic lives in handlers.
-
-### Anti-Pattern 6: Scoped DbContext registered as Singleton
-**What goes wrong:** EF Core DbContext tracks entity state per request. Singleton lifetime causes shared state across requests, leading to data corruption.
-**Correct:** Register as Scoped (the AddDbContext default). Register repositories as Scoped too.
-
----
-
-## Scalability Considerations
-
-| Concern | Current (InMemory) | If migrating to SQL Server |
-|---------|-------------------|---------------------------|
-| Persistence swap | Change `UseInMemoryDatabase` to `UseSqlServer` in Infrastructure's `DependencyInjection.cs` only | Zero changes in Domain or Application |
-| Adding new entity | Add to Domain, add port in Application, add EF config in Infrastructure | Same procedure |
-| Adding use case | New command/query + handler in Application, no other layers change | Same |
-| Cross-cutting (logging, validation) | MediatR pipeline behaviors in Application | Same |
-| Multiple data sources | Add second repository port + adapter | Application unchanged |
+**Do this instead:** Use Workload Identity Federation — keyless, bound to the GitHub Actions
+OIDC token, no secrets to manage or rotate.
 
 ---
 
 ## Sources
 
-**Confidence: HIGH** — primary sources used:
-
-- Microsoft .NET Architecture Guide: [Infrastructure persistence layer with EF Core](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/infrastructure-persistence-layer-implementation-entity-framework-core) (updated April 2026)
-- Herberto Graca: [DDD, Hexagonal, Onion, Clean, CQRS — How I put it all together](https://herbertograca.com/2017/11/16/explicit-architecture-01-ddd-hexagonal-onion-clean-cqrs-how-i-put-it-all-together/) — canonical synthesis of all patterns
-- codewithmukesh: [Clean Architecture in .NET 10](https://codewithmukesh.com/blog/clean-architecture-dotnet/) — .NET 10 specific guidance
-- codewithmukesh: [CQRS and MediatR in ASP.NET Core](https://codewithmukesh.com/blog/cqrs-and-mediatr-in-aspnet-core/) — MediatR integration patterns
-- Code Maze: [Hexagonal Architectural Pattern in C#](https://code-maze.com/csharp-hexagonal-architectural-pattern/) — .NET solution structure with ports/adapters folders
-- Jason Taylor CleanArchitecture template: [Web.csproj](https://github.com/jasontaylordev/CleanArchitecture/blob/main/src/Web/Web.csproj) — reference implementation confirming Api refs Application + Infrastructure
-- DEV Community: [Clean Architecture in .NET 10 — Application Layer CQRS](https://dev.to/bspann/clean-architecture-in-net-10-the-application-layer-cqrs-without-the-ceremony-3j1l) — folder-per-feature CQRS structure
-- Paulovich.NET: [Hexagonal and Clean Architecture Styles with .NET Core Reviewed](https://paulovich.net/hexagonal-and-clean-architecture-styles-with-net-core-reviewed/) — layer-to-hexagon mapping
+- [Microsoft Learn: Run an ASP.NET Core app in Docker containers](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/docker/building-net-docker-images?view=aspnetcore-10.0) — official multi-stage Dockerfile pattern for ASP.NET Core 10 (verified 2025-04-22, updated to aspnetcore-10.0 moniker)
+- [Microsoft Learn: Health checks in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks) — `AddHealthChecks()` + `MapHealthChecks()` registration, default response format
+- [Microsoft Learn: ASP.NET Core Web Host — Server URLs](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/host/web-host?view=aspnetcore-10.0#server-urls) — `ASPNETCORE_URLS` environment variable behavior
+- [GitHub: serilog/serilog-aspnetcore](https://github.com/serilog/serilog-aspnetcore) — `UseSerilog` pattern, bootstrap logger, appsettings.json integration
+- Google Cloud Run container contract (PORT env var, 8080 default) — HIGH confidence from community consensus and GCP docs (WebFetch blocked by permissions; based on well-established Cloud Run behavior)

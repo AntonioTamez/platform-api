@@ -1,170 +1,325 @@
 # Feature Landscape
 
-**Domain:** .NET 10 REST API — Clean Architecture + Hexagonal Architecture (learning/reference project)
-**Researched:** 2026-05-27
-**Confidence:** HIGH — all claims verified against official Microsoft docs, Context7-resolved library docs, and multiple credible community sources.
+**Domain:** .NET 10 API — Docker containerization + GitHub Actions CI/CD + Google Cloud Run deployment
+**Researched:** 2026-06-01
+**Confidence:** HIGH — Docker and ASP.NET Core health check claims verified against official Microsoft docs (aspnetcore-10.0 moniker). Cloud Run behavior verified against Google Cloud docs redirect target. GitHub Actions workflow structure from well-established google-github-actions action suite. Serilog package behavior from training data (HIGH confidence — stable, multi-year API).
 
 ---
 
-## Table Stakes
+## Scope Note
 
-Features the project must have for the learning goal to be meaningful. Missing any of these means the project does not demonstrate the stated patterns.
+This FEATURES.md covers **v2.0 additions only**. v1.0 features (CRUD, FluentValidation, Problem Details, OpenAPI/Scalar) are already built and in `.planning/research/FEATURES.md` from the prior milestone. The features below are additive — none replace existing v1.0 functionality.
+
+---
+
+## What Cloud Run Requires vs. What is Nice-to-Have
+
+This is the most important distinction for v2.0 planning. Cloud Run has hard requirements; everything else is optional.
+
+### Cloud Run Hard Requirements
+
+| Requirement | Detail | Source |
+|-------------|--------|--------|
+| Container listens on `$PORT` (default 8080) | Cloud Run injects `PORT` env var; container must bind to it | Cloud Run container contract |
+| HTTP response to health probe | Must return 2xx on startup probe path (default: any path on `$PORT`) | Cloud Run health check docs |
+| Container starts within 4 minutes (default) | Startup timeout configurable up to 3600s, but 4 min is default | Cloud Run container contract |
+| Linux container image (amd64) | Cloud Run runs on Linux; Windows containers not supported | Cloud Run platform constraint |
+| JSON logs on stdout/stderr for Cloud Logging integration | Plaintext logs work but lose structure; JSON enables filtering/searching | Google Cloud Logging best practice |
+
+### Nice-to-Have (Operational, Not Required to Deploy)
+
+- Separate liveness vs readiness endpoints (Cloud Run supports both but does not require them)
+- `/health` as the probe path (any path that returns 200 works; `/health` is convention)
+- docker-compose for local parity (useful locally, irrelevant to Cloud Run)
+- Image scanning in CI (security hygiene, not deployment blocker)
+
+---
+
+## Feature Areas
+
+### Area 1: Dockerfile (DOCK-01)
+
+#### Table Stakes
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| GET all persons | Baseline CRUD query | Low | Returns list of PersonDto — no pagination needed at this scale |
-| GET person by ID | Baseline CRUD query | Low | Returns 404 (Problem Details) when not found |
-| POST person | Creates new aggregate root | Low-Med | Validates invariants in domain, maps to CreatePersonCommand |
-| PUT person | Full replacement update | Low-Med | Maps to UpdatePersonCommand; all fields required |
-| PATCH person | Partial update | Med | Use JSON Patch (RFC 6902) via `Microsoft.AspNetCore.JsonPatch.SystemTextJson` — the .NET 10 System.Text.Json-native package, not the legacy Newtonsoft one |
-| DELETE person | Remove by ID | Low | Returns 204 No Content or 404 |
-| Calculated Age property | Core domain rule — Age derives from DateOfBirth, never stored | Low | Lives on the domain entity as a computed property; never in the DB |
-| Seeded in-memory data | Required for zero-setup demo | Low | EF Core `HasData` or `OnModelCreating` seed; at least 3-5 persons |
-| Rich domain entity (no anemic model) | Learning objective — business rules in entity, not service | Med | Person encapsulates its own invariants; factory method or guarded constructor enforces them |
-| EF Core InMemory persistence | Simulates real EF patterns without a real DB | Low | DbContext, IQueryable, repository pattern over EF |
-| Controller-based API (not Minimal API) | Explicit requirement; maps cleanly to Presentation layer | Low | `[ApiController]` attribute enables automatic model-state validation and Problem Details wiring |
-| Problem Details error responses (RFC 7807 / RFC 9457) | Standard machine-readable error format — built into ASP.NET Core | Low | `AddProblemDetails()` + `UseExceptionHandler()` + `UseStatusCodePages()` in Program.cs covers all error paths with zero custom middleware |
-| Command/Query separation (CQRS via MediatR) | Core learning objective — separates read and write concerns | Med | MediatR (`/luckypennysoftware/mediatr`) dispatches commands (writes) and queries (reads) through handlers; each handler is one use-case |
-| FluentValidation in Application layer | Input validation decoupled from domain | Low-Med | Validators live in Application layer, registered as a MediatR `ValidationBehavior<TRequest, TResponse>` pipeline behavior |
-| Global exception handler | Catches unhandled exceptions, maps to Problem Details | Low | `IExceptionHandler` (introduced .NET 8, available in .NET 10) registered via `AddExceptionHandler<T>()`; cleaner than middleware for this pattern |
-| HTTP semantics (status codes) | REST correctness | Low | 200 GET, 201 POST with Location header, 204 DELETE, 400 validation, 404 not found, 409 conflict where applicable |
+| Multi-stage build | Build stage must not ship the SDK into runtime image; standard for .NET | LOW | Stage 1: `mcr.microsoft.com/dotnet/sdk:10.0` for restore + publish. Stage 2: `mcr.microsoft.com/dotnet/aspnet:10.0` for runtime. |
+| `dotnet restore` as a separate layer | NuGet restore is the slowest step; caching it avoids re-downloading packages on every push | LOW | Copy `*.sln` and all `*.csproj` files first, run `dotnet restore`, then copy source. This is the official Microsoft recommended pattern. |
+| `dotnet publish -c Release` | Release build for production | LOW | Use `--no-restore` after the cached restore layer. Output to `/app`. |
+| EXPOSE 8080 | Documents the port; Cloud Run defaults to 8080 | LOW | `EXPOSE 8080` is documentation only — Cloud Run uses the `PORT` env var, not EXPOSE. Set `ASPNETCORE_HTTP_PORTS=8080` or `ASPNETCORE_URLS=http://+:8080` to tell Kestrel where to listen. |
+| ENTRYPOINT as exec form | Required for signal handling (SIGTERM) to work correctly; Cloud Run sends SIGTERM before killing a container | LOW | `ENTRYPOINT ["dotnet", "PersonsAPI.Api.dll"]` — exec form, not shell form. Shell form wraps in `/bin/sh -c` which prevents signal propagation. |
 
----
-
-## Differentiators
-
-Features that make this reference project genuinely instructive beyond a generic tutorial. Not required, but add real learning value.
+#### Differentiators
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Result\<T\> pattern (ErrorOr or FluentResults) | Replaces exception-for-flow-control with typed return values; handlers return `Result<PersonDto>` instead of throwing | Med | Domain and application layers return `Result<T>`; controller translates to HTTP responses. Use `ErrorOr` (v1.x) — DDD-aligned, ASP.NET Core-friendly, smallest footprint for a learning project |
-| Domain invariant enforcement via private setters + factory methods | Forces callers through guarded entry points — demonstrates "no invalid state" discipline | Med | `Person.Create(firstName, paternalLastName, maternalLastName, dateOfBirth)` returns `Result<Person>` and validates at construction time |
-| Value objects for name fields | Demonstrates primitive obsession cure — `PersonName` value object wrapping first/paternal/maternal names | Med-High | Use C# `record` with validation in constructor. Genuinely instructive but increases complexity — mark as optional if time-boxed |
-| MediatR logging behavior | Cross-cutting concern demo — logs every command/query without touching handlers | Low | `LoggingBehavior<TRequest, TResponse>` wraps every handler; pure infrastructure concern that the domain never sees |
-| Swagger / OpenAPI with Scalar or Swashbuckle | Immediate discoverability without Postman | Low | ASP.NET Core 10 ships with built-in OpenAPI generation (`AddOpenApi()`) — no Swashbuckle needed for basic cases |
-| Response DTOs vs domain objects | Prevents domain model leakage through the API boundary | Low | `PersonDto` in Application layer; mappers (manual or AutoMapper) in Presentation; never expose domain entities directly |
-| Port and adapter naming conventions | Makes the Hexagonal pattern visible in code — `IPersonRepository` is a port; `EfPersonRepository` is the adapter | Low | Naming discipline enforced in project structure; no code complexity overhead |
+| Non-root user (`USER $APP_UID`) | Security hardening; .NET 8+ images ship a built-in `app` user (UID 1654); Cloud Run supports non-root | LOW | `USER $APP_UID` in the runtime stage. `$APP_UID` is pre-defined in `mcr.microsoft.com/dotnet/aspnet:10.0`. No custom useradd needed. |
+| `.dockerignore` | Excludes `bin/`, `obj/`, `.git/`, test results from the build context; speeds up `docker build` | LOW | Essential for multi-project solution; without it the SDK restores against stale local artifacts. |
+| SHA pinning on base images | Prevents supply-chain drift; ensures reproducible builds | MEDIUM | `FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:<digest>`. Adds maintenance burden of updating digests. Optional for a learning project; document the practice. |
 
----
-
-## Anti-Features
-
-Features to explicitly NOT build in this project. Building these derails the learning goal or adds complexity that obscures patterns.
+#### Anti-Features
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| Authentication / Authorization | Out of scope per PROJECT.md; adds JWT/OAuth complexity that competes with architecture learning | Leave endpoints open; add a comment marker `// AUTH: add [Authorize] here in production` |
-| Real database (SQL Server, SQLite, PostgreSQL) | EF InMemory satisfies the learning goal; a real DB adds connection strings, migrations, transaction management | Keep InMemory; the DbContext and repository patterns are identical — the adapter swaps, not the port |
-| Pagination on GET all | With seeded InMemory data, pagination adds complexity for zero real benefit | Return full list; document pagination as a "next evolution" item in a README comment |
-| Custom response envelope (wrapping every response in `{ data: ..., meta: ... }`) | Conflicts with RFC 7807 Problem Details; creates two response shapes clients must handle; no standard backing it | Use raw HTTP semantics for success responses + Problem Details for errors — consistent, standard, no custom parser needed |
-| Soft delete / audit fields (CreatedAt, UpdatedAt, IsDeleted) | Adds cross-cutting persistence concerns that need interceptors or SaveChanges overrides | Hard delete only; mark audit fields as a "Phase N+1" concern in comments |
-| CQRS with separate read/write databases | Event sourcing, projections, eventual consistency — a different learning scope entirely | One DbContext, one InMemory store; CQRS here means command/query handler separation, not physical database split |
-| Generic repository (IRepository\<T\>) | Anti-pattern when using EF Core — EF's DbSet is already a generic repository; wrapping it again adds indirection for no gain | Use `IPersonRepository` (specific port) over `IRepository<Person>` (generic abstraction) |
-| Anemic domain service that holds all logic | Defeats the rich model requirement; puts business rules outside the entity | All Person-specific rules go in the Person entity; Application layer orchestrates, never implements domain rules |
-| AutoMapper for simple DTOs | Adds a dependency and "magic" mapping that obscures what the Presentation layer does | Manual mapping extension methods (`PersonDto.FromDomain(person)`) are explicit, debuggable, and educationally clearer |
-| Versioning (v1/v2 API routes) | No clients to support; versioning is operational concern, not architectural | Single version; document as evolution concern |
-| Unit + Integration test project (in initial build) | Valuable eventually but adds project setup complexity that delays first working API | Add test projects in a dedicated later phase |
+| Single-stage Dockerfile | Ships the full .NET SDK (700+ MB) in the runtime image; final image is 3-4x larger than needed | Use multi-stage: SDK for build, aspnet runtime for final image (final size ~200 MB) |
+| COPY . . before restore | Invalidates the NuGet restore cache on every source change; rebuild takes minutes instead of seconds | Copy only `*.csproj`/`*.sln` first, restore, then copy source |
+| Running as root | Violates least-privilege; Cloud Run runs containers as root by default but the .NET aspnet image ships `$APP_UID` for a reason | Add `USER $APP_UID` before ENTRYPOINT |
+| Hardcoding port 5000 or 80 | Cloud Run injects `PORT=8080`; hardcoded port breaks deployment | Use `ASPNETCORE_HTTP_PORTS=8080` env var in Dockerfile (or configure via Cloud Run service YAML) |
+
+---
+
+### Area 2: docker-compose (DOCK-02)
+
+#### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| `docker-compose.yml` that runs the API locally | Local parity — developers can `docker compose up` and hit the same image that ships to Cloud Run | LOW | Service: build from Dockerfile, port mapping `8080:8080`, env var `ASPNETCORE_ENVIRONMENT=Development` |
+
+#### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| `docker-compose.override.yml` for dev vs. prod settings | Keeps production config clean; dev overrides mount local files or set dev environment variables | LOW | Override file sets `ASPNETCORE_ENVIRONMENT=Development`; base file is production-safe |
+
+#### Anti-Features
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| Committing secrets in docker-compose.yml | Exposes API keys/connection strings in version control | Use `.env` file (gitignored) or environment variable injection; docker-compose supports `env_file:` |
+
+---
+
+### Area 3: GitHub Actions CI/CD Pipeline (CICD-01)
+
+#### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Trigger on `push` to `main` | Standard CD trigger; every merge to main deploys | LOW | `on: push: branches: [main]` |
+| `dotnet restore` + `dotnet build` step | Verifies the code compiles in CI before building the image | LOW | Use `actions/setup-dotnet@v4` with `dotnet-version: '10.x'` |
+| `dotnet test` step | Runs all 64 existing tests; gates the deploy on green tests | LOW | `dotnet test --no-build` after build step; fail-fast |
+| Authenticate to Google Cloud | Required before pushing to Artifact Registry or deploying to Cloud Run | MEDIUM | Use `google-github-actions/auth@v2` with Workload Identity Federation (preferred) or Service Account JSON key (simpler for learning) |
+| `docker build` + `docker push` to Artifact Registry | Produces the container image that Cloud Run pulls | MEDIUM | Use `docker/build-push-action@v5` after auth; tag with `${{ github.sha }}` for traceability |
+| Deploy to Cloud Run | The deployment step itself | MEDIUM | Use `google-github-actions/deploy-cloudrun@v2`; specify service name, region, image tag |
+
+#### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Workload Identity Federation (WIF) | Eliminates long-lived service account JSON key; uses short-lived tokens; Google's recommended auth pattern | MEDIUM | Requires one-time GCP setup (Workload Identity Pool + Provider); stored as GitHub secret `WORKLOAD_IDENTITY_PROVIDER` and `SERVICE_ACCOUNT`. More secure than JSON key. |
+| Tag image with `git sha` | Makes every deployed image traceable to the exact commit; enables rollback | LOW | `IMAGE_TAG=${{ github.sha }}` — append to Artifact Registry path |
+| Separate `build` and `deploy` jobs | Build can succeed but deploy can be gated on approval; clear separation of concerns | MEDIUM | Not required for a learning project; single job is acceptable |
+| Cache Docker build layers in CI | Speeds up image builds significantly on repeated pushes | MEDIUM | `docker/setup-buildx-action` + `cache-from: type=gha` — GitHub Actions cache for BuildKit layers |
+
+#### Anti-Features
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| Service account JSON key committed to repo | Critical security violation — rotatable secrets must never be in source | Store as GitHub Actions secret; prefer WIF over JSON keys |
+| Deploying latest tag | `latest` tag makes rollbacks ambiguous; you can't tell which commit a `latest` image corresponds to | Tag with `github.sha`; optionally also tag `latest` for human convenience but deploy by SHA tag |
+| Building image without running tests first | Shipping broken code to Cloud Run; wastes push/deploy time | Always run `dotnet test` before `docker build` in the workflow |
+| Using `actions/checkout@v2` or older | v2 is outdated; security improvements and performance fixes are in v4 | Use `actions/checkout@v4` |
+
+---
+
+### Area 4: Health Check Endpoint (OBS-02)
+
+#### Cloud Run Probe Behavior (Verified Against Official Docs)
+
+Cloud Run supports two probe types:
+- **Startup probe**: checks that the container successfully started. Default: Cloud Run polls any path on the container port until it gets a 2xx response. Configured via service YAML `startupProbe`.
+- **Liveness probe**: periodically checks that the container is still healthy. If it fails, Cloud Run restarts the container. Configured via service YAML `livenessProbe`.
+
+Cloud Run does NOT have a readiness probe concept (that is Kubernetes-specific). Cloud Run withholds traffic until the startup probe passes.
+
+Default startup probe: Cloud Run polls `GET /` on `$PORT` every 10 seconds for up to 240 seconds. A `200 OK` response passes. This means the API works without any `/health` endpoint — but `/health` is the conventional, explicit path.
+
+#### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| `/health` endpoint returning `200 OK` | Cloud Run needs proof the container started; the conventional path is `/health` | LOW | `builder.Services.AddHealthChecks()` + `app.MapHealthChecks("/health")` in Program.cs. No custom checks needed for InMemory app. |
+| Responds within startup timeout | Cloud Run default: 240s; Kestrel cold start on .NET 10 is under 2s | LOW | No action needed beyond ensuring app boots; document the default timeout |
+
+#### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Separate `/health/live` and `/health/ready` endpoints | Follows Kubernetes naming convention; Cloud Run ignores readiness but the split is forward-compatible | LOW | `app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })` — liveness excludes all checks (just proves the process is alive). `app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = hc => hc.Tags.Contains("ready") })` — readiness runs tagged checks. |
+| JSON response body on health endpoint | Returns `{ "status": "Healthy", "totalDuration": "...", "entries": {} }` — useful for debugging | LOW | Set `ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse` if using AspNetCore.HealthChecks.UI.Client, or write a custom JSON writer using `JsonSerializer`. Default writer returns plaintext "Healthy". |
+| Tag health checks for selective probing | Allows future database checks, downstream checks to be selectively included in ready vs live probes | LOW | `AddHealthChecks().AddCheck<MyCheck>("my-check", tags: new[] { "ready" })` |
+
+#### Anti-Features
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| Custom `/health` controller action | Adds unnecessary MVC routing overhead; `MapHealthChecks` is purpose-built middleware | Use `app.MapHealthChecks("/health")` directly in Program.cs |
+| Health check that calls the InMemory database | InMemory provider never fails; the check would always return Healthy and adds zero signal | For InMemory: register no custom checks. If DB is swapped to real in v2.1, add `AddDbContextCheck<AppDbContext>()` then. |
+| Protecting `/health` with authorization | Cloud Run's probe cannot authenticate; a protected `/health` endpoint will fail the startup probe | Map health checks without `RequireAuthorization()`. They should be publicly accessible on the container port. |
+
+---
+
+### Area 5: Serilog Structured Logging (OBS-01)
+
+#### Google Cloud Logging Integration
+
+Google Cloud Logging reads stdout/stderr from Cloud Run containers. If the output is a single JSON object per line, Cloud Logging automatically parses fields like `severity`, `message`, `timestamp`, `labels`, etc. If the output is plaintext, Cloud Logging stores it as an unstructured string — no filtering, no severity levels.
+
+The key field for Cloud Logging severity mapping is `"severity"` (not Serilog's default `"Level"`). Serilog's `CompactJsonFormatter` writes `"@l"` for level. The `Serilog.Sinks.GoogleCloudLogging` sink or a custom formatter that maps to `"severity"` is needed for first-class integration.
+
+**Minimum viable approach**: `Serilog.Formatting.Compact` with `CompactJsonFormatter` outputs one JSON line per log entry. Cloud Logging ingests it and stores it as a JSON payload. The `@l` field does not auto-map to severity labels — logs appear at the default severity. This is acceptable for a learning project.
+
+**Production approach**: Use `Serilog.Sinks.GoogleCloudLogging` which writes the `severity` field in Google's format and maps Serilog log levels to Cloud Logging severity levels (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+
+#### Table Stakes
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Replace default Microsoft console logger with Serilog | Default ASP.NET Core logger outputs plaintext; Serilog with a JSON formatter outputs structured JSON | LOW | `Serilog.AspNetCore` package. `UseSerilog()` on `WebApplicationBuilder.Host`. |
+| JSON output to stdout | Cloud Run captures stdout; JSON format enables Cloud Logging parsing | LOW | `Serilog.Formatting.Compact` package. `WriteTo.Console(new CompactJsonFormatter())` in Serilog config. |
+| Request logging middleware | Logs every HTTP request with method, path, status code, elapsed time as structured fields | LOW | `.UseSerilogRequestLogging()` in the middleware pipeline — single call, replaces verbose Microsoft request logging with one structured log per request. |
+| `appsettings.json` configuration | Log levels configurable without recompile | LOW | Serilog reads from `Serilog` section in appsettings.json; `MinimumLevel`, `Override` per namespace |
+
+#### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| `Serilog.Sinks.GoogleCloudLogging` sink | Maps Serilog levels to Cloud Logging severity labels; logs appear with correct INFO/WARNING/ERROR icons in Cloud Console | MEDIUM | Adds `Serilog.Sinks.GoogleCloudLogging` NuGet package. Requires GCP credentials in container (ADC or service account). For Cloud Run, ADC is available automatically via the instance service account. |
+| Enrichers: `FromLogContext`, `WithMachineName`, `WithEnvironmentName` | Adds context fields to every log entry — useful for correlating logs across instances | LOW | `Serilog.Enrichers.Environment` + `.Enrich.FromLogContext()` + `.Enrich.WithMachineName()`. Cloud Run sets `K_SERVICE`, `K_REVISION`, `K_CONFIGURATION` env vars automatically — can enrich with these. |
+| Destructuring request bodies (selectively) | Logs structured command/query data instead of raw strings — enables log-driven debugging | MEDIUM | `.Destructure.ByTransforming<CreatePersonCommand>(c => new { c.FirstName, ... })`. Avoid logging PII; for PersonsAPI with names + DOB this is a sensitivity decision. |
+
+#### Anti-Features
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| Serilog.Sinks.File in Cloud Run | Cloud Run containers are ephemeral; files written inside the container are lost on restart; disk in Cloud Run is not persistent | Write to stdout only (Console sink). Use Cloud Logging for persistence and querying. |
+| `new LoggerConfiguration().CreateLogger()` before builder.Build() (two-phase bootstrap) | Two-phase Serilog setup (bootstrap logger then full logger) adds complexity; only needed if you want to log startup errors before the host is built | For a learning project: configure Serilog fully inside `UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration))` — single phase, simpler, reads appsettings. |
+| Using both Serilog and the default Microsoft logging simultaneously | Causes duplicate log entries; wastes CPU on two log pipelines | Call `builder.Logging.ClearProviders()` before or rely on `UseSerilog(clearProviders: true)` to replace the default providers. |
+| Logging sensitive PII fields | DateOfBirth and full names are PII; logging them creates compliance issues | Log operation context (person ID, command type) not field values. Serilog destructuring can exclude sensitive properties. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-EF Core InMemory (DbContext, seed data)
-    └── IPersonRepository port (Application layer)
-            └── EfPersonRepository adapter (Infrastructure layer)
-                    └── GET all / GET by ID / DELETE handlers
+Cloud Run deployment (CLOUD-01)
+    requires: Dockerfile with port 8080 (DOCK-01)
+    requires: Health check endpoint at /health (OBS-02)
+                 requires: AddHealthChecks() + MapHealthChecks() in Program.cs
+    requires: JSON-format logs on stdout (OBS-01)
+                 requires: Serilog + CompactJsonFormatter
 
-MediatR dispatcher
-    ├── GetAllPersonsQuery → GetAllPersonsQueryHandler
-    ├── GetPersonByIdQuery → GetPersonByIdQueryHandler
-    ├── CreatePersonCommand → CreatePersonCommandHandler
-    ├── UpdatePersonCommand → UpdatePersonCommandHandler
-    ├── PatchPersonCommand → PatchPersonCommandHandler   ← depends on JSON Patch library
-    └── DeletePersonCommand → DeletePersonCommandHandler
+GitHub Actions CI/CD (CICD-01)
+    requires: Dockerfile (DOCK-01)
+    requires: GCP Artifact Registry (manual one-time setup in GCP console)
+    requires: Cloud Run service (first deploy creates it; subsequent deploys update it)
+    requires: GCP IAM permissions for the deploying service account
+    enhances: docker-compose (DOCK-02) — local build validation matches CI build
 
-FluentValidation validators (Application layer)
-    └── ValidationBehavior<TRequest, TResponse> (MediatR pipeline)
-            └── registered before every Command handler (Queries typically skip validation)
+docker-compose (DOCK-02)
+    requires: Dockerfile (DOCK-01)
+    enhances: local development — run the exact runtime image before pushing
 
-Person domain entity (rich model, private setters)
-    ├── Age computed property  ← no DB column, no storage
-    ├── Create() factory method returning Result<Person>
-    └── Domain invariants (name not empty, DOB not future)
-            └── enforced before any command handler persists
+Health check (OBS-02)
+    requires: ASP.NET Core health checks middleware (built-in, no extra NuGet)
+    independent: can be added before or after Serilog/Docker work
 
-AddProblemDetails() + UseExceptionHandler() + UseStatusCodePages()
-    └── Global exception handler (IExceptionHandler)
-            └── Maps domain exceptions / Result failures → Problem Details responses
-
-[ApiController] attribute on controllers
-    └── Automatic ModelState → ValidationProblemDetails (400) for bad requests
+Serilog (OBS-01)
+    requires: Serilog.AspNetCore NuGet package
+    requires: Serilog.Formatting.Compact NuGet package (for JSON output)
+    optional-enhancer: Serilog.Sinks.GoogleCloudLogging (for severity-mapped Cloud Logging)
+    independent: can be added before Docker/CI work; works locally too
 ```
 
----
+### Dependency Notes
 
-## PATCH-Specific Detail
-
-PATCH deserves a dedicated note because it has two valid RFC approaches with meaningfully different complexity profiles for this project:
-
-**JSON Patch (RFC 6902) — RECOMMENDED for this project**
-- Operation-based: `[{ "op": "replace", "path": "/firstName", "value": "Ana" }]`
-- ASP.NET Core 10 ships `Microsoft.AspNetCore.JsonPatch.SystemTextJson` — the new System.Text.Json native implementation (replaces Newtonsoft dependency). Install with `dotnet add package Microsoft.AspNetCore.JsonPatch.SystemTextJson`.
-- Controller action receives `JsonPatchDocument<PersonUpdateDto>`, calls `patchDoc.ApplyTo(dto, ModelState)`, then dispatches a `PatchPersonCommand`.
-- Teaches the explicit operation model; shows how Presentation layer bridges an HTTP mechanism to an Application layer command.
-- Confidence: HIGH — verified in official .NET 10 docs.
-
-**JSON Merge Patch (RFC 7396) — simpler but less instructive**
-- Payload is a partial JSON object; nulls signal deletion. Simpler client experience, harder to distinguish "field omitted" from "field set to null" in C#.
-- No built-in ASP.NET Core support; requires a third-party library. Not recommended for a learning project where controlling dependencies matters.
-
-**Recommendation:** Implement JSON Patch (RFC 6902) with `Microsoft.AspNetCore.JsonPatch.SystemTextJson`. It is harder to implement than Merge Patch but directly teachable, officially documented, and idiomatic for .NET 10.
+- **Health check requires no DB check for this project:** EF InMemory never fails, so `AddHealthChecks()` with no registered checks returns `Healthy` by default. This is correct behavior — the check proves the process is alive, not that data is valid.
+- **Port 8080 is the Cloud Run default but must be explicitly configured in Kestrel:** ASP.NET Core 10 defaults to port 5000 (HTTP) and 5001 (HTTPS) in development. In the Dockerfile (or via Cloud Run service env vars), set `ASPNETCORE_HTTP_PORTS=8080`. Do not set `ASPNETCORE_URLS=https://+:8080` — Cloud Run terminates TLS at the load balancer; the container only needs HTTP.
+- **HTTPS is not needed in the container:** Cloud Run handles TLS termination. The container talks plain HTTP on port 8080. Remove HTTPS redirection middleware (`app.UseHttpsRedirection()`) when running in Cloud Run, or make it conditional on environment.
 
 ---
 
-## Validation Layer Placement
+## MVP Definition (v2.0 Launch Sequence)
 
-This project uses a two-tier validation model (not three) to keep the learning surface manageable:
+Build in this order — each step is independently testable:
 
-| Tier | What Validates | Technology | Purpose |
-|------|---------------|------------|---------|
-| Application layer | Input DTOs / command properties (non-null, string length, date range) | FluentValidation + MediatR `ValidationBehavior` pipeline | Catches invalid input before it touches the domain |
-| Domain layer | Business invariants (names non-empty, DOB not in future, age > 0) | Domain entity constructor / factory method returning `Result<T>` | Protects the aggregate root's internal consistency |
+### Launch With (v2.0)
 
-Do NOT validate in: controllers (beyond model binding), Infrastructure layer, or the MediatR handlers themselves. Controllers dispatch; handlers orchestrate; domain enforces.
+- [ ] **Serilog with JSON output (OBS-01)** — lowest risk, fully local, improves all subsequent debugging. Add before any Docker work.
+- [ ] **Health check at `/health` (OBS-02)** — trivial to add, required by Cloud Run. Add while still running locally.
+- [ ] **Dockerfile multi-stage (DOCK-01)** — verify `docker build` + `docker run -p 8080:8080` works locally before writing CI.
+- [ ] **docker-compose (DOCK-02)** — `docker compose up` as local integration test of the image.
+- [ ] **GitHub Actions CI/CD (CICD-01)** — build → test → push to Artifact Registry → deploy to Cloud Run.
+
+### Add After Validation (v2.x)
+
+- [ ] Workload Identity Federation — replace JSON key auth with WIF after baseline deployment is confirmed.
+- [ ] `Serilog.Sinks.GoogleCloudLogging` — add after confirming basic JSON logs are visible in Cloud Console.
+- [ ] Separate `/health/live` and `/health/ready` endpoints — add after basic `/health` is confirmed working.
+- [ ] Docker BuildKit layer caching in CI — add after basic CI pipeline is stable.
+
+### Future Consideration (v3+)
+
+- [ ] Image vulnerability scanning (Trivy or Google Artifact Analysis) in CI pipeline.
+- [ ] Cloud Run traffic splitting (blue/green) for zero-downtime deploys.
+- [ ] Cloud Run min-instances to avoid cold starts.
 
 ---
 
-## MVP Recommendation
+## Feature Prioritization Matrix
 
-Build in this order — each step produces a running, testable API:
+| Feature | Value to v2 Goal | Implementation Cost | Priority |
+|---------|-----------------|---------------------|----------|
+| Dockerfile (multi-stage, port 8080) | HIGH — nothing deploys without it | LOW | P1 |
+| Health check `/health` | HIGH — Cloud Run requires 200 response | LOW | P1 |
+| Serilog JSON logging | HIGH — Cloud Logging usability | LOW | P1 |
+| GitHub Actions CI/CD | HIGH — the whole point of v2 | MEDIUM | P1 |
+| docker-compose local parity | MEDIUM — local dev quality | LOW | P2 |
+| WIF auth vs. JSON key | MEDIUM — security improvement | MEDIUM | P2 |
+| Separate live/ready endpoints | LOW — Cloud Run doesn't require it | LOW | P3 |
+| GCL sink for severity mapping | LOW — logs still work without it | MEDIUM | P3 |
+| BuildKit layer cache in CI | LOW — nice speedup | MEDIUM | P3 |
 
-1. Domain entity `Person` with rich model (private setters, computed Age, factory method, basic invariants)
-2. Application ports: `IPersonRepository`, command/query objects, DTOs
-3. MediatR handlers for GET all and GET by ID (read path first — no validation complexity)
-4. EF Core InMemory DbContext + `EfPersonRepository` adapter + seed data
-5. `PersonsController` wired to MediatR for the two GET endpoints — confirm the full vertical slice works
-6. Problem Details plumbing: `AddProblemDetails()`, `UseExceptionHandler()`, `UseStatusCodePages()`
-7. POST with FluentValidation + ValidationBehavior (write path, first mutation)
-8. PUT (full update command — straightforward after POST)
-9. DELETE
-10. PATCH with `Microsoft.AspNetCore.JsonPatch.SystemTextJson`
+**Priority key:**
+- P1: Must have for v2.0 launch
+- P2: Should have, add when P1 is stable
+- P3: Nice to have, defer to v2.1
 
-**Defer entirely:** value objects, Result\<T\> pattern, logging behavior — add in a second pass once the full CRUD surface is working. These are differentiators, not table stakes.
+---
+
+## Packages Required for v2.0
+
+| Package | Purpose | NuGet |
+|---------|---------|-------|
+| `Serilog.AspNetCore` | Serilog integration with ASP.NET Core host; `UseSerilog()`, `UseSerilogRequestLogging()` | serilog/serilog-aspnetcore |
+| `Serilog.Formatting.Compact` | `CompactJsonFormatter` — one JSON line per log entry; Cloud Logging compatible | serilog/serilog-formatting-compact |
+| No new package for health checks | `Microsoft.AspNetCore.Diagnostics.HealthChecks` is built into ASP.NET Core 10 SDK | — |
+
+Optional (P3):
+
+| Package | Purpose |
+|---------|---------|
+| `Serilog.Sinks.GoogleCloudLogging` | Maps Serilog levels to Cloud Logging severity; structured metadata |
+| `AspNetCore.HealthChecks.UI.Client` | JSON response writer for health check endpoint; returns detailed check results |
 
 ---
 
 ## Sources
 
-- Microsoft Docs — Handle errors in ASP.NET Core APIs (.NET 10): https://learn.microsoft.com/en-us/aspnet/core/fundamentals/error-handling-api?view=aspnetcore-10.0
-- Microsoft Docs — JSON Patch in ASP.NET Core (.NET 10): https://learn.microsoft.com/en-us/aspnet/core/web-api/jsonpatch?view=aspnetcore-10.0
-- Milan Jovanovic — Problem Details for ASP.NET Core APIs: https://www.milanjovanovic.tech/blog/problem-details-for-aspnetcore-apis
-- Milan Jovanovic — CQRS Validation with MediatR Pipeline and FluentValidation: https://www.milanjovanovic.tech/blog/cqrs-validation-with-mediatr-pipeline-and-fluentvalidation
-- Milan Jovanovic — Value Objects in .NET (DDD Fundamentals): https://www.milanjovanovic.tech/blog/value-objects-in-dotnet-ddd-fundamentals
-- Code Maze — CQRS Validation Pipeline with MediatR and FluentValidation: https://code-maze.com/cqrs-mediatr-fluentvalidation/
-- codewithmukesh — CQRS and MediatR in ASP.NET Core: https://codewithmukesh.com/blog/cqrs-and-mediatr-in-aspnet-core/
-- codewithmukesh — ProblemDetails in ASP.NET Core: https://codewithmukesh.com/blog/problem-details-in-aspnet-core/
-- DEV Community — Building Rich Domain Models: https://dev.to/cristofima/building-rich-domain-models-a-practical-guide-to-ddd-in-net-5952
-- CodingDroplets — ErrorOr vs OneOf vs FluentResults in .NET: https://codingdroplets.com/erroror-vs-oneof-vs-fluentresults-dotnet-result-pattern
-- Microsoft Learn — Designing a microservice domain model: https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/microservice-domain-model
-- Goat Review — Rethinking MediatR Validation: Moving from Pipeline to Domain Objects: https://goatreview.com/rethinking-mediatr-pipeline-validation-pattern/
+- Microsoft Docs — Run ASP.NET Core in Docker (aspnetcore-10.0): https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/docker/building-net-docker-images?view=aspnetcore-10.0
+- Microsoft Docs — Health checks in ASP.NET Core: https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks
+- Microsoft Docs — .NET container images (sdk vs aspnet, non-root user): https://learn.microsoft.com/en-us/dotnet/core/docker/container-images
+- Microsoft Docs — Logging in ASP.NET Core 10: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/logging/
+- Microsoft Docs — Containerize a .NET app with Docker: https://learn.microsoft.com/en-us/dotnet/core/docker/build-container
+- Google Cloud Run container contract: https://cloud.google.com/run/docs/container-contract
+- Google Cloud Run health checks: https://cloud.google.com/run/docs/configuring/healthchecks
+- google-github-actions/deploy-cloudrun action: https://github.com/google-github-actions/deploy-cloudrun
+- google-github-actions/auth (WIF): https://github.com/google-github-actions/auth
+- Serilog.AspNetCore GitHub: https://github.com/serilog/serilog-aspnetcore
+- Serilog.Formatting.Compact GitHub: https://github.com/serilog/serilog-formatting-compact
+
+---
+
+*Feature landscape for: v2.0 Cloud Deployment (Docker + GitHub Actions CI/CD + Cloud Run + Health Checks + Serilog)*
+*Researched: 2026-06-01*

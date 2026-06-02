@@ -1,510 +1,440 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** .NET 10 Clean Architecture + Hexagonal Architecture Web API (Personal Data / Person entity)
-**Researched:** 2026-05-27
-**Confidence:** HIGH — pitfalls verified against official Microsoft docs, multiple .NET-specific community sources, and EF Core documentation
+**Domain:** Containerizing and deploying a multi-project .NET 10 Web API to Google Cloud Run with GitHub Actions CI/CD
+**Researched:** 2026-06-01
+**Confidence:** HIGH — pitfalls verified against official Google Cloud Run container contract docs, Microsoft .NET Docker docs, Serilog official docs, and GitHub Actions OIDC documentation
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, invalidate the learning goals, or produce silently wrong behavior.
+Mistakes that cause the container to not start, the deployment to fail silently, or the CI/CD pipeline to break on first run.
 
 ---
 
-### Pitfall 1: Accidentally Anemic Person Entity
+### Pitfall 1: Wrong COPY Paths in a Multi-Project Solution Dockerfile
 
-**What goes wrong:** The Person entity is declared with `public` property setters and no behavior methods. Business logic — validation, state transitions, Age derivation — migrates to the Application layer handler or the controller. The entity becomes a data bag.
+**What goes wrong:** The Dockerfile COPY instructions reference paths that only exist in a single-project layout. The build stage fails with `COPY failed: file not found in build context` because the `.csproj` files are nested under `src/` and the context must be the solution root.
 
-**Why it happens:** EF Core's default conventions encourage parameterless constructors and public setters so the ORM can materialize objects. Developers satisfy EF's requirements by opening up the entity and never close it back down. The project compiles and works, so no one notices.
+A common broken pattern:
 
-**Consequences:**
-- Age calculation scatters into handlers, controllers, or extension methods — inconsistency guaranteed.
-- Any handler can set `FirstName = ""` without validation. Domain invariants are unenforced.
-- Unit testing domain logic requires spinning up Application services instead of testing the entity directly.
-- The explicit requirement "no anemic models" is violated while the code looks structurally correct.
-
-**Warning signs:**
-- `Person` has `public set` on every property.
-- `PersonService` or a handler contains `if (person.DateOfBirth > today) throw ...` instead of the entity throwing.
-- `Age` is computed in the Application layer, not in a property getter on `Person`.
-- No public factory method or constructor with required parameters exists on `Person`.
-
-**Prevention strategy:**
-1. Give `Person` a single public constructor that requires all fields: `public Person(string firstName, string paternalLastName, string maternalLastName, DateOnly dateOfBirth)`. Validate inside it.
-2. Use `private set` (or `init`-only setters) for all properties.
-3. Make `Age` a computed property `public int Age => CalculateAge(DateOfBirth);` — no setter at all, never stored.
-4. Add a private parameterless constructor for EF: `private Person() { }` — this satisfies EF without exposing mutation.
-5. Add intention-revealing update methods: `public void UpdateName(string firstName, ...)` with guards inside.
-
-**Phase/layer:** Domain project — must be correct before any other layer is built. Infrastructure and Application depend on whatever contract Domain establishes.
-
----
-
-### Pitfall 2: Business Logic Placed in Application Layer Instead of Domain
-
-**What goes wrong:** Developers correctly identify "Application layer handles use cases" but interpret this as "Application layer contains all logic." Validation rules, Age derivation, and domain invariants end up in command handlers (`CreatePersonCommandHandler`, etc.).
-
-**Why it happens:** The Application layer is where orchestration happens — it is the most active layer developers write. It is tempting to put logic there because it is "close to where things happen." The distinction between *orchestration* (Application) and *invariant enforcement* (Domain) is subtle.
-
-**Consequences:**
-- The same invariant must be duplicated in every handler that touches Person — e.g., every update handler repeats the date-of-birth validation.
-- Domain entities cannot be tested in isolation — you must go through the handler.
-- Future handlers that bypass the Application layer (background jobs, seeding) violate invariants silently.
-
-**Warning signs (the wrong pattern):**
-```csharp
-// Handler: business rule incorrectly in Application
-public async Task Handle(UpdatePersonCommand cmd, CancellationToken ct)
-{
-    var person = await _repo.GetByIdAsync(cmd.Id);
-    if (cmd.DateOfBirth > DateOnly.FromDateTime(DateTime.Today))
-        throw new ValidationException("Date of birth cannot be in the future.");
-    person.DateOfBirth = cmd.DateOfBirth; // public setter: also wrong
-    await _repo.UpdateAsync(person);
-}
+```dockerfile
+# WRONG — assumes Dockerfile sits next to the .csproj
+COPY *.csproj ./
+RUN dotnet restore
+COPY . ./
 ```
 
-**Correct pattern:**
-```csharp
-// Handler: orchestrates only
-public async Task Handle(UpdatePersonCommand cmd, CancellationToken ct)
-{
-    var person = await _repo.GetByIdAsync(cmd.Id);
-    person.UpdateDateOfBirth(cmd.DateOfBirth); // entity enforces its own rule
-    await _repo.UpdateAsync(person);
-}
+When the Docker build context is the solution root (which it must be, to access all four projects), this copies nothing useful from `src/` because none of the `.csproj` files are at the root.
 
-// Domain entity: enforces the invariant
-public void UpdateDateOfBirth(DateOnly dateOfBirth)
-{
-    if (dateOfBirth >= DateOnly.FromDateTime(DateTime.Today))
-        throw new DomainException("Date of birth must be in the past.");
-    DateOfBirth = dateOfBirth;
-}
+**Why it happens:** Most .NET Docker examples show a single-project layout where the Dockerfile sits next to the `.csproj`. The PersonsAPI solution has a `src/` subfolder with four separate `.csproj` files and a `tests/` subfolder — the Dockerfile must live at the solution root and COPY must mirror the directory tree.
+
+**How to avoid:** Place the Dockerfile at the solution root. COPY each `.csproj` file individually before running `dotnet restore` so Docker layer caching works. Then COPY the full source.
+
+```dockerfile
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /source
+
+# Copy solution file and each .csproj individually for layer-cached restore
+COPY PersonsAPI.sln .
+COPY src/PersonsAPI.Domain/PersonsAPI.Domain.csproj          src/PersonsAPI.Domain/
+COPY src/PersonsAPI.Application/PersonsAPI.Application.csproj src/PersonsAPI.Application/
+COPY src/PersonsAPI.Infrastructure/PersonsAPI.Infrastructure.csproj src/PersonsAPI.Infrastructure/
+COPY src/PersonsAPI.Api/PersonsAPI.Api.csproj                src/PersonsAPI.Api/
+
+# Restore uses the solution — resolves all project references
+RUN dotnet restore PersonsAPI.sln
+
+# Copy everything else (source files)
+COPY src/ src/
+
+# Publish the API project
+RUN dotnet publish src/PersonsAPI.Api/PersonsAPI.Api.csproj \
+    -c Release -o /app --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+COPY --from=build /app .
+ENTRYPOINT ["dotnet", "PersonsAPI.Api.dll"]
 ```
 
-**Prevention strategy:**
-- Rule of thumb: if the logic is about whether a Person *can* be in a certain state, it belongs in Domain. If it is about *how to coordinate* fetching, saving, and returning, it belongs in Application.
-- Application layer handlers should read like prose: get entity, call entity method, persist. No conditionals about domain invariants.
-
-**Phase/layer:** Domain layer (invariant methods on `Person`). Application layer only orchestrates.
-
----
-
-### Pitfall 3: EF Core Leaking into the Domain Layer
-
-**What goes wrong:** EF Core persistence concerns bleed into the Domain project through three distinct vectors:
-
-**Vector A — Data annotations on the domain entity:**
-```csharp
-[Required]           // EF/validation attribute — belongs in Infrastructure config
-[MaxLength(100)]     // persistence concern — belongs in IEntityTypeConfiguration
-[Column("first_name")] // database concern — should not touch Domain
-public string FirstName { get; set; }
-```
-The Domain project now has a direct `Microsoft.EntityFrameworkCore` dependency.
-
-**Vector B — Navigation properties:**
-```csharp
-public class Person
-{
-    public ICollection<Address> Addresses { get; set; } = new List<Address>(); // EF navigation
-}
-```
-Navigation properties are persistence-graph concepts. They encourage callers to use `.Include()` from Application or Presentation, leaking query knowledge out of the repository.
-
-**Vector C — `IQueryable<T>` from repositories:**
-```csharp
-// Port in Application/Domain — DO NOT return IQueryable
-public interface IPersonRepository
-{
-    IQueryable<Person> GetAll(); // caller can add any LINQ — no abstraction exists
-}
-```
-Any handler can call `.Where()`, `.Include()`, `.OrderBy()` on the result — the repository abstraction is meaningless.
-
-**Why it happens:** EF Core documentation shows data annotations on entity classes because it is the quickest path. Developers copy examples directly. `IQueryable` feels convenient and lazy — "let the caller decide the query."
-
-**Consequences:**
-- Domain project gets a NuGet dependency on EF Core — testability of Domain without EF infrastructure is broken.
-- Swapping persistence (e.g., to a real DB later) requires touching Domain.
-- `IQueryable` leakage: Application handlers become tightly coupled to EF LINQ — query logic is not encapsulated.
-
-**Warning signs:**
-- Domain `.csproj` references `Microsoft.EntityFrameworkCore`.
-- Entity class file has `using Microsoft.EntityFrameworkCore` or attribute imports.
-- Repository interface returns `IQueryable<Person>` instead of `IEnumerable<Person>` or `Task<IReadOnlyList<Person>>`.
-- Application handlers call `.Include()` or `.Where()` on what the repository returned.
-
-**Prevention strategy:**
-1. Zero EF Core references in the Domain project — enforce this with a `.csproj` audit.
-2. Configure EF mappings exclusively in Infrastructure using `IEntityTypeConfiguration<Person>` and the Fluent API. `OnModelCreating` in `PersonDbContext` (Infrastructure) is where `HasMaxLength`, `HasColumnName`, etc. live.
-3. Repository interface returns materialized collections: `Task<IReadOnlyList<Person>>` or `Task<Person?>`. Never `IQueryable`.
-4. For InMemory: even `IQueryable` works with EF InMemory — that does not make it correct. Use `.ToListAsync()` inside the repository implementation and return `IReadOnlyList<Person>` across the boundary.
-
-**Phase/layer:** Domain project (zero EF references). Infrastructure project (all EF configuration). Application project (depends on port interfaces, never on EF types).
-
----
-
-### Pitfall 4: Circular Project References
-
-**What goes wrong:** A developer adds a reference in the wrong direction — most commonly, the Domain project references Application (to use a DTO or service), or Infrastructure references Presentation.
+Build always with context at solution root:
 
 ```
-// Wrong: Domain → Application (Domain should have zero outward references)
-// Wrong: Application → Infrastructure (breaks the inversion)
-// Wrong: Infrastructure → Presentation
-```
-
-In .NET, the compiler prevents actual circular references (A → B → A). However, developers work around this by:
-- Dumping shared types (DTOs, interfaces, enums) into Domain to avoid reference issues — polluting Domain with non-domain concerns.
-- Merging Application and Infrastructure into one project to avoid wiring up DI — losing the boundary entirely.
-
-**Why it happens:** When a type is "needed everywhere," placing it in the innermost project (Domain) feels logical. Shared DTOs, response models, and error types end up in Domain even though Domain should not know about HTTP responses or command objects.
-
-**Warning signs:**
-- Domain project contains `PersonDto`, `CreatePersonRequest`, or any type with the word "Request", "Response", "Command", or "DTO" — these belong in Application or Presentation.
-- Application project has `using PersonsAPI.Infrastructure` anywhere.
-- A single `PersonsAPI.Core` project contains both domain entities and application services mixed together.
-
-**Prevention strategy:**
-- Enforce the dependency direction: Domain → (nothing). Application → Domain. Infrastructure → Application + Domain. Presentation → Application.
-- Permitted project reference graph for this solution:
-  ```
-  PersonsAPI.Presentation  →  PersonsAPI.Application
-  PersonsAPI.Infrastructure →  PersonsAPI.Application + PersonsAPI.Domain
-  PersonsAPI.Application   →  PersonsAPI.Domain
-  PersonsAPI.Domain        →  (no project references)
-  ```
-- Interfaces (ports) live in the layer that *consumes* them. `IPersonRepository` lives in Application (or Domain if it is truly domain-driven), implemented in Infrastructure. No reference from Application to Infrastructure is ever needed because DI wires it at startup in the Presentation/Host project.
-- Shared primitives (Result types, DomainException base class) stay in Domain as they are domain concerns.
-
-**Phase/layer:** Solution structure — must be correct at project creation. Extremely costly to fix after code is written across layers.
-
----
-
-### Pitfall 5: Conflating Clean Architecture Layers with Hexagonal Ports and Adapters
-
-**What goes wrong:** Developers treat Clean Architecture and Hexagonal Architecture as synonyms with different names. They implement Clean Architecture's four layers and declare it "also Hexagonal" — but never think in terms of primary/driving ports vs. secondary/driven ports.
-
-**The conceptual distinction that must be preserved:**
-
-| Concept | Clean Architecture | Hexagonal Architecture |
-|---------|-------------------|----------------------|
-| Structure | Concentric rings (Domain → Application → Infrastructure → Presentation) | Application core surrounded by ports; adapters outside |
-| Dependency direction | Always inward | Core depends on nothing external |
-| Interface role | Contract between adjacent layers | Port: explicit entry/exit point for a specific actor type |
-| Adapter concept | Not named explicitly | Driving adapter (calls in) vs. driven adapter (called by core) |
-| "Layer" vs. "Port" | Layers enforce layering | Ports enforce actor isolation |
-
-**What conflation looks like in code:**
-- Every interface is called a "port" without distinction — `IPersonRepository` and `IPersonController` are both called "ports" even though controllers are driving adapters, not ports.
-- The application core calls `IPersonRepository` but the developer places that interface in Presentation, which makes no topological sense.
-- "Hexagonal" is treated as just a synonym for "dependency inversion" — no distinction between driving and driven sides.
-
-**Correct mapping for this project:**
-```
-Driving (Primary) side — Presentation layer:
-  Controller (HTTP adapter) → calls → IPersonService / ICreatePersonUseCase (primary port in Application)
-
-Driven (Secondary) side — Infrastructure layer:
-  Application core calls → IPersonRepository (secondary port in Application/Domain)
-  PersonRepository (EF Core adapter) implements IPersonRepository
+docker build -t personsapi .
 ```
 
 **Warning signs:**
-- The developer cannot explain the difference between a "driving adapter" and a "driven adapter" for this specific project.
-- `IPersonRepository` is defined in the Infrastructure project (wrong — the port lives with the consumer, the implementation lives in Infrastructure).
-- Controllers are described as "primary ports" — they are adapters that *use* primary ports.
+- `COPY failed: file not found in build context` during `docker build`
+- Dockerfile is placed inside `src/PersonsAPI.Api/` instead of the solution root
+- Single `COPY *.csproj ./` instruction that grabs nothing when context is the solution root
+- `dotnet restore` succeeds locally but fails in CI because context differs
 
-**Prevention strategy:**
-- Explicitly label interfaces in code comments: `// Primary port (driving): called by HTTP adapter (controller)` and `// Secondary port (driven): implemented by EF Core adapter (repository)`.
-- Place secondary port interfaces (IPersonRepository) in the Application project — Infrastructure references Application to implement them. This is correct and avoids circular dependencies.
-- Ports are defined by the hexagon (Application core). Adapters live outside and implement or consume ports.
-
-**Phase/layer:** Application project (defines ports). Infrastructure project (implements driven/secondary adapters). Presentation project (contains driving/primary adapters — controllers).
+**Phase to address:** Phase 1 (Dockerfile creation — DOCK-01). Get this right before any CI/CD integration.
 
 ---
 
-### Pitfall 6: PATCH Implementation Mistakes in a Layered Architecture
+### Pitfall 2: Cloud Run Port Mismatch — Container Listens on 5000, Cloud Run Expects 8080
 
-**What goes wrong:** PATCH is the most architecturally tricky operation in a layered API. Three distinct failure modes exist:
+**What goes wrong:** Cloud Run routes traffic to port 8080 by default (configurable via the `PORT` environment variable it injects). The ASP.NET Core development server defaults to `http://localhost:5000` (and `https://localhost:5001`). A container that only listens on 5000 will appear to deploy successfully — Cloud Run reports "Deployed" — but every request returns a 502 or the service never passes its health check, causing deployment to roll back immediately.
 
-**Failure Mode A — JsonPatchDocument typed to the Domain entity:**
-```csharp
-// Controller: WRONG — domain entity crosses into Presentation
-[HttpPatch("{id}")]
-public IActionResult Patch(int id, [FromBody] JsonPatchDocument<Person> patchDoc)
-{
-    var person = _repo.GetById(id); // infrastructure leaking into Presentation
-    patchDoc.ApplyTo(person);       // patch applied directly to domain entity
-}
+**Why it happens:** ASP.NET Core's Kestrel defaults are set for local development convenience. In a container, these defaults persist unless explicitly overridden. Cloud Run injects a `PORT` environment variable at runtime and expects the container to honor it. Most .NET documentation shows Kestrel config for development, not for Cloud Run deployment.
+
+**How to avoid:** Configure the container to listen on `0.0.0.0:8080` (all interfaces, port 8080). The canonical approach for Cloud Run is to read the `PORT` env var:
+
+```dockerfile
+# In the runtime stage — set the URL Kestrel binds to
+ENV ASPNETCORE_URLS=http://+:8080
 ```
-The domain entity now needs public setters to be patchable — this destroys the rich model.
 
-**Failure Mode B — Skipping model validation before applying the patch:**
-`ModelState.IsValid` is `true` even when a JSON Patch document targets non-existent properties. Validation must happen *after* `ApplyTo()`, not before. Developers check `ModelState` at the top of the action (before `ApplyTo`) and consider themselves done — invalid patch paths get applied silently.
+Or, more correctly, read Cloud Run's injected `PORT` variable at startup. Add to `Program.cs` before `builder.Build()`:
 
-**Failure Mode C — Applying the patch to the Application DTO/command, then re-validating before passing to domain:**
-This is actually the correct pattern but developers skip the re-validation step after applying the patch, allowing invalid state (empty first name, future birth date) to reach the domain without domain guard methods catching it.
-
-**Correct pattern for .NET 10:**
 ```csharp
-// In .NET 10, use Microsoft.AspNetCore.JsonPatch.SystemTextJson package
-// Controller action — typed to a mutable Presentation DTO, not to Person domain entity
-[HttpPatch("{id}")]
-public async Task<IActionResult> Patch(int id, [FromBody] JsonPatchDocument<UpdatePersonDto> patchDoc)
-{
-    // 1. Fetch current state as DTO (via Application layer query)
-    var current = await _mediator.Send(new GetPersonQuery(id));
-    if (current is null) return NotFound();
+// Respect Cloud Run's PORT environment variable (defaults to 8080)
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://+:{port}");
+```
 
-    var dto = _mapper.Map<UpdatePersonDto>(current);
+The `ENV ASPNETCORE_URLS=http://+:8080` approach in the Dockerfile is simpler and sufficient for this project. Do not set HTTPS in the container — Cloud Run terminates TLS externally.
 
-    // 2. Apply patch to the DTO (not the domain entity)
-    patchDoc.ApplyTo(dto, ModelState);
+**Warning signs:**
+- `ASPNETCORE_URLS` is not set in the Dockerfile or as a Cloud Run environment variable
+- The service deploys but returns 502 on every request
+- Cloud Run logs show the container started but health check never succeeds
+- `docker run -p 8080:5000` is used locally as a workaround — this masks the real issue (the container still only binds to 5000 internally)
+- `EXPOSE 5000` is in the Dockerfile
 
-    // 3. Validate AFTER ApplyTo — ModelState may now have errors
-    if (!ModelState.IsValid) return UnprocessableEntity(ModelState);
+**Phase to address:** Phase 1 (Dockerfile — DOCK-01). Test locally with `docker run -e PORT=8080 -p 8080:8080 personsapi` before deploying. Confirm `curl http://localhost:8080/health` returns 200.
 
-    // 4. Send the validated DTO to Application layer
-    await _mediator.Send(new UpdatePersonCommand(id, dto));
-    return NoContent();
-}
+---
+
+### Pitfall 3: EF Core InMemory Data Does Not Survive Container Restarts
+
+**What goes wrong:** Every time Cloud Run scales to zero and back (or restarts the container after a new deployment), all seeded data is gone. The 3 persons seeded by `DataSeeder` disappear. This is expected behavior for an in-memory store, but it surprises developers who confuse "the container is running" with "the data persists."
+
+This is not a bug — it is the correct and expected behavior of the EF Core InMemory provider. It must be explicitly documented so the team does not spend time debugging "missing data" as if it were a deployment fault.
+
+**Why it happens:** EF Core InMemory stores data in the process's heap. When the process exits (container stop/restart/scale-down), all data is lost. Cloud Run's stateless execution model makes this highly visible: Cloud Run scales to zero after inactivity by default, so the container restarts frequently.
+
+**How to avoid (for this project's scope):** This is the known and accepted tradeoff of using EF Core InMemory for a learning project. The `DataSeeder` runs on every startup and restores the 3 baseline persons — this is intentional. No fix is needed for v2.0.
+
+Document it explicitly in the Cloud Run deployment configuration so no one tries to "fix" it:
+
+```yaml
+# cloud-run-service.yaml comment
+# NOTE: This service uses EF Core InMemory persistence.
+# All data resets on every container restart / scale-to-zero event.
+# This is expected behavior for the learning scope of this project.
+# Real persistence (SQLite / PostgreSQL) is deferred to v2.1+.
+```
+
+**What would be wrong to do:** Mounting a Cloud Run volume (Cloud Run gen2 supports volume mounts) and trying to persist the InMemory database through a file — this is architecturally incorrect and signals a misunderstanding of EF Core InMemory. The correct path to persistence is switching the provider to SQLite or Cloud SQL (v2.1+ scope).
+
+**Warning signs (misdiagnosis):**
+- "Persons are missing after redeployment" treated as a bug to fix rather than expected behavior
+- Attempts to add Cloud Run volume mounts to preserve in-memory state
+- `DataSeeder` is removed because "data should already be there from the last run"
+
+**Phase to address:** Phase 2 (Cloud Run deployment — CLOUD-01). Document in the Cloud Run service YAML comment. Verify `DataSeeder` runs on each container boot.
+
+---
+
+### Pitfall 4: Health Check Path Misconfiguration
+
+**What goes wrong:** The health check endpoint is registered correctly in ASP.NET Core but the Cloud Run liveness/readiness probe targets the wrong path, or the endpoint is registered but the middleware pipeline order places it after authentication/authorization middleware that rejects the unauthenticated probe request.
+
+Three distinct failure modes:
+
+**Failure Mode A — Path mismatch:**
+Cloud Run probe configured to `GET /healthz` but the endpoint is registered at `/health`. The probe returns 404, Cloud Run marks the service unhealthy, and the deployment fails or traffic does not route to the new revision.
+
+**Failure Mode B — MapHealthChecks missing or ordered wrong in middleware pipeline:**
+```csharp
+// WRONG ORDER — health check endpoint unreachable if authorization runs first
+app.UseAuthorization();
+app.MapControllers();
+// health check never mapped, or placed after auth rejects the probe
+```
+
+If this project adds authentication in a future milestone and the health endpoint is not explicitly excluded from auth, Cloud Run probes will get 401 responses and the service will appear unhealthy.
+
+**Failure Mode C — Health check endpoint returns the wrong content type or status code:**
+Cloud Run only requires an HTTP 200 response. It does not require a specific body. However, some health check configurations return 503 when a dependency (like a database) is unhealthy — with EF Core InMemory this is unlikely, but a misconfigured `AddDbContextCheck` or a typo in a custom check can return 503 consistently, causing Cloud Run to fail the deployment.
+
+**How to avoid:**
+
+Register health checks in `Program.cs` correctly:
+
+```csharp
+// Add health checks — no DB check needed for InMemory (it never goes down)
+builder.Services.AddHealthChecks();
+
+// Map before auth middleware so probes are never blocked
+app.MapHealthChecks("/health");
+// This must appear before app.UseAuthorization() if auth is added later
+```
+
+In Cloud Run service configuration, match the path exactly:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
 ```
 
 **Warning signs:**
-- `JsonPatchDocument<Person>` (domain entity) in controller parameter.
-- `ModelState.IsValid` checked *before* `patchDoc.ApplyTo()`.
-- `ApplyTo` called without passing `ModelState` — errors are swallowed.
-- No separate `UpdatePersonDto` or `PatchPersonDto` — the domain entity doubles as the patch target.
+- Health check endpoint returns 404 (path mismatch or `MapHealthChecks` not called)
+- Service deploys but Cloud Run shows "container failed to start" or "health check failed"
+- `curl http://localhost:8080/health` returns a non-200 response locally
+- Health endpoint is behind a `[Authorize]` attribute or protected by middleware order
 
-**Prevention strategy:**
-- Define a dedicated mutable `UpdatePersonDto` (or `PatchPersonDto`) in Application layer. PATCH applies to this DTO.
-- The Application command handler receives the validated DTO and calls domain entity methods — domain never sees `JsonPatchDocument`.
-- In .NET 10: install `Microsoft.AspNetCore.JsonPatch.SystemTextJson` (not the Newtonsoft version). It is not a drop-in replacement — it does not support dynamic types.
-- Always pass `ModelState` to `ApplyTo()`: `patchDoc.ApplyTo(dto, ModelState)`.
-
-**Phase/layer:** Presentation project handles PATCH binding and `JsonPatchDocument`. Application project defines `UpdatePersonDto` and the command. Domain project exposes update methods that the command handler calls.
+**Phase to address:** Phase 3 (Health check endpoint — OBS-02). Test with `curl` locally in Docker before deploying to Cloud Run. Verify with `docker run -e PORT=8080 -p 8080:8080 personsapi` that `http://localhost:8080/health` returns `200 Healthy`.
 
 ---
 
-## Moderate Pitfalls
+### Pitfall 5: GitHub Actions GCP Authentication — Service Account Key JSON vs Workload Identity Federation
 
-Mistakes that produce incorrect behavior or architectural drift but do not force a complete rewrite.
+**What goes wrong:** Developers store a long-lived service account key JSON file as a GitHub Actions secret (`GCP_SA_KEY`) and use it directly for authentication. This works but creates a persistent security risk: the key never expires, anyone with access to the secret can impersonate the service account indefinitely, and rotating the key requires manual action.
 
----
+The more critical practical pitfall: developers generate the key, paste it incorrectly into the GitHub secret (truncated, with extra whitespace, or without base64-encoding when required), and the `google-github-actions/auth` action fails with a cryptic JSON parse error or `invalid_grant` — wasting hours of debugging.
 
-### Pitfall 7: Age Calculation Off-by-One and Timezone Errors
+**Why it happens:** Service account key JSON is the simplest path shown in most tutorials. Workload Identity Federation requires additional GCP setup (creating a Workload Identity Pool, configuring the provider, binding the service account) that seems complex on first encounter.
 
-**What goes wrong:** Age calculated incorrectly in one of three ways:
+**Recommendation: Use Workload Identity Federation (WIF) for v2.0.** It is Google's officially recommended approach and GitHub Actions is explicitly supported. The one-time GCP setup takes ~10 minutes but eliminates secret rotation concerns permanently.
 
-**Error A — Simple year subtraction:**
-```csharp
-// WRONG: returns 31 on Dec 31 for someone born Jan 1, 1995, but also returns 31 on Jan 1 before midnight
-public int Age => DateTime.Today.Year - DateOfBirth.Year;
-```
-Returns the wrong age if the birthday has not yet occurred this calendar year. A person born December 31, 1994 shows age 31 on January 1, 2026 — they are still 30.
+**How to avoid (WIF setup):**
 
-**Error B — DateTime.Now with timezone:**
-```csharp
-// WRONG: server timezone affects "today" — a UTC server shows wrong date for users in UTC+8 past midnight
-public int Age => DateTime.Now.Year - DateOfBirth.Year; // Now includes time component
-```
-On a UTC server, a user in Tokyo at 1 AM on their birthday gets an incorrect age for most of the day.
+GCP setup (one-time, via gcloud CLI):
 
-**Error C — Leap year birthday (Feb 29):**
-A person born February 29 in a leap year — if the code does a month/day comparison in a non-leap year, `02/29` does not exist and naive comparisons fail or throw.
+```bash
+# Create Workload Identity Pool
+gcloud iam workload-identity-pools create "github-pool" \
+  --location="global" --display-name="GitHub Actions Pool"
 
-**Correct algorithm using DateOnly (no timezone issue):**
-```csharp
-public int Age
-{
-    get
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow); // or DateTime.Today — see note
-        var age = today.Year - DateOfBirth.Year;
-        // Subtract 1 if birthday has not yet occurred this year
-        if (DateOfBirth.DayOfYear > today.DayOfYear
-            // Handle leap year: Feb 29 birthday in non-leap year — treat as Feb 28
-            || (DateTime.IsLeapYear(DateOfBirth.Year)
-                && DateOfBirth.Month == 2
-                && DateOfBirth.Day == 29
-                && !DateTime.IsLeapYear(today.Year)
-                && today.Month == 2
-                && today.Day == 28))
-        {
-            // Already handled by DayOfYear comparison in most cases
-        }
-        // Cleaner: compare month+day directly
-        if (new DateOnly(today.Year, DateOfBirth.Month, 1).AddDays(DateOfBirth.Day - 1) > today)
-            age--;
-        return age;
-    }
-}
+# Create provider for GitHub Actions
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+# Allow the pool to impersonate the service account
+gcloud iam service-accounts add-iam-policy-binding \
+  "deploy-sa@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/GITHUB_ORG/REPO_NAME"
 ```
 
-**Simplest correct implementation:**
-```csharp
-public int Age
-{
-    get
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        int age = today.Year - DateOfBirth.Year;
-        // Check if birthday has not occurred yet this year
-        if (DateOfBirth.Month > today.Month
-            || (DateOfBirth.Month == today.Month && DateOfBirth.Day > today.Day))
-        {
-            age--;
-        }
-        return age;
-    }
-}
+GitHub Actions workflow step:
+
+```yaml
+- name: Authenticate to GCP
+  uses: google-github-actions/auth@v2
+  with:
+    workload_identity_provider: 'projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+    service_account: 'deploy-sa@PROJECT_ID.iam.gserviceaccount.com'
 ```
+
+**If the team uses service account key JSON as a fallback** (acceptable for a learning project with low security requirements), ensure the key is stored as the raw JSON string in the GitHub secret, not base64-encoded, unless the action version requires it. The `google-github-actions/auth@v2` action accepts raw JSON in `credentials_json`.
 
 **Warning signs:**
-- `DateTime.Now.Year - DateOfBirth.Year` with no birthday-occurrence check.
-- Age computed using `DateTime` (time-of-day included) instead of `DateOnly` or `DateTime.Today`.
-- No unit test for a date-of-birth on December 31 checked on January 1.
-- No consideration for what "today" means on a UTC server.
+- `invalid_grant` or `Could not load the default credentials` errors in the auth step
+- The service account key JSON secret is truncated or has been modified (copy-paste truncation at 65KB GitHub secret limit — this is real for large JSON keys)
+- Workflow fails at auth step with a JSON parse error
+- Service account key is committed to the repository (critical security incident — rotate immediately)
 
-**Prevention strategy:**
-- Use `DateOnly` for `DateOfBirth` storage — removes the time component problem by design.
-- Use `DateTime.UtcNow` (not `DateTime.Now`) for the "today" reference to avoid server timezone issues. For a learning project with InMemory, `DateTime.Today` is acceptable but note the limitation.
-- Unit test three cases: birthday today (correct age), birthday tomorrow (age - 1), birthday yesterday (correct age).
-- Keep Age computation in the `Person` entity — it is domain logic, not infrastructure.
-
-**Phase/layer:** Domain entity `Person` — `Age` property getter. Test coverage at Domain unit test level.
+**Phase to address:** Phase 4 (GitHub Actions CI/CD — CICD-01). Set up GCP auth in the first pipeline iteration. Do not defer — auth is the prerequisite for every subsequent pipeline step.
 
 ---
 
-### Pitfall 8: Over-Engineering vs. Under-Engineering for a Learning Project
+### Pitfall 6: Serilog Not Outputting JSON in the Container (Plain Text Logs in Cloud Logging)
 
-**What goes wrong:** Two opposite failure modes exist for a learning exercise:
+**What goes wrong:** Serilog is added to the project and logs appear in the console during `dotnet run` locally — but in Cloud Run, Cloud Logging shows plain text like `[16:22:01 INF] GET /health 200` instead of structured JSON. Google Cloud Logging cannot parse severity, correlate traces, or query structured fields from plain text output.
 
-**Over-engineering (adds complexity without learning value):**
-- Implementing CQRS with MediatR when the goal is to understand Hexagonal boundaries — MediatR hides the port/adapter relationship behind a message bus.
-- Adding Event Sourcing, Domain Events, or Outbox patterns before the base architecture is understood.
-- Creating separate read models and write models (CQRS projections) for a 5-field entity.
-- Adding FluentValidation when C# guard clauses in the entity constructor demonstrate the same concept more clearly.
-- Implementing Unit of Work on top of EF Core's built-in `SaveChanges` transaction — EF already provides this.
+Three failure modes:
 
-**Under-engineering (misses the learning goals):**
-- Using a `List<Person>` instead of EF Core InMemory — skips the DbContext/repository pattern the project exists to demonstrate.
-- Putting all code in a single project — no layer boundaries to observe.
-- Making `Age` a stored field in the database — misses the "derived/computed domain property" lesson.
-- Using a static helper class for Age calculation instead of an entity method — misses the rich model lesson.
-- Skipping interfaces (ports) and directly injecting `PersonRepository` into handlers — the hexagonal boundary disappears.
-
-**Warning signs (over-engineering):**
-- The solution has more than 5 projects for a 1-entity learning app.
-- Every simple query goes through a Command/Query object + Handler + Dispatcher when the goal is not to learn CQRS.
-- Adding infrastructure concerns (Redis, Serilog structured logging, health checks) before the architecture itself is demonstrated.
-
-**Warning signs (under-engineering):**
-- `PersonsController` directly instantiates `new PersonRepository()` — no DI, no port.
-- `PersonRepository` returns `List<Person>` and is referenced directly by the controller.
-- Age is a settable property on the entity.
-
-**Prevention strategy:**
-- Scope by goal: this project's learning goal is "how do Clean and Hexagonal coexist." Every design choice should teach that. MediatR obscures it; direct service interfaces reveal it.
-- Keep it to four projects: `Domain`, `Application`, `Infrastructure`, `Presentation` (Web API host).
-- Use constructor injection everywhere (this teaches DI and port/adapter wiring).
-- Do implement: port interfaces in Application, repository in Infrastructure, controllers as adapters in Presentation, domain entity with behavior. These are the learning targets.
-- Do not implement: CQRS, Domain Events, FluentValidation, AutoMapper (manual mapping is fine and more transparent for learning).
-
-**Phase/layer:** Solution architecture decision — made once at project start. Review before adding any new abstraction.
-
----
-
-## Minor Pitfalls
-
----
-
-### Pitfall 9: EF Core InMemory Behavioral Differences vs. Real Databases
-
-**What goes wrong:** Developers write application logic that only works with InMemory and silently fails when switching to a real database.
-
-**Specific InMemory behaviors that differ from SQL:**
-- No referential integrity enforcement — foreign keys are not validated.
-- No SQL transactions — `BeginTransaction()` exists but does nothing useful.
-- Case-sensitive string comparisons by default — `WHERE firstName = 'john'` might not match 'John' in InMemory but does in SQL Server with default collation.
-- No `LIKE` SQL translation for complex contains — may behave differently.
-- `IQueryable` queries over InMemory work in-process — this makes it appear that returning `IQueryable` from repositories is fine, when it would be a real problem against SQL Server where the query must be fully expressible in SQL.
-
-**Warning signs:**
-- String comparisons in LINQ without `.ToLower()` normalization.
-- Tests pass with InMemory but logic is not verifiable against SQL behavior.
-- Repository returns `IQueryable` — "works fine" in InMemory hides the abstraction violation.
-
-**Prevention strategy:**
-- Treat InMemory as a simulation tool, not a test for SQL correctness.
-- Write queries as if they will run against SQL Server — use translated LINQ, not in-memory tricks.
-- The `IQueryable` abstraction violation is still wrong even if InMemory makes it work — enforce the boundary now.
-- Document: "Switch to SQL Server by replacing the InMemory registration in DI — no other code should change." This is the test of whether the architecture is truly clean.
-
-**Phase/layer:** Infrastructure project (repository implementations). DI registration in Presentation (host).
-
----
-
-### Pitfall 10: Missing Private Constructor for EF Core Materialization
-
-**What goes wrong:** Developer removes the parameterless constructor from `Person` (correctly, to enforce a rich model) but forgets to add a private one for EF Core. EF Core throws at runtime when attempting to materialize entities from the database.
-
+**Failure Mode A — Console sink uses the default plain text formatter:**
 ```csharp
-// EF Core needs a way to create instances during query materialization
-// It will use the private parameterless constructor — this is fine
-public class Person
-{
-    private Person() { } // for EF Core only
+// This installs Serilog with a plain text console sink — NOT JSON
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
+```
+The `WriteTo.Console()` default uses a human-readable template. Cloud Logging receives raw text, not JSON.
 
-    public Person(string firstName, ...)  // enforced public constructor
-    {
-        // validation here
-    }
-}
+**Failure Mode B — JSON formatter configured but environment check prevents it in production:**
+```csharp
+// This only uses JSON in "Production" ASPNETCORE_ENVIRONMENT
+// Cloud Run's default environment is not always "Production" — check this
+if (app.Environment.IsProduction())
+    Log.Logger = new LoggerConfiguration().WriteTo.Console(new JsonFormatter()).CreateLogger();
+```
+If `ASPNETCORE_ENVIRONMENT` is not explicitly set to `Production` in the Cloud Run service, the JSON branch never runs.
+
+**Failure Mode C — `Serilog.Sinks.Console` package version does not include `CompactJsonFormatter`:**
+The `CompactJsonFormatter` lives in `Serilog.Formatting.Compact` (a separate NuGet package). If only `Serilog.Sinks.Console` is installed, the formatter is not available and developers fall back to the default text template.
+
+**How to avoid:**
+
+Install both packages in the API project:
+
+```xml
+<PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+<PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
 ```
 
+Configure JSON output unconditionally (not environment-gated — Cloud Run always wants JSON):
+
+```csharp
+// Program.cs — configure Serilog before builder.Build()
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new CompactJsonFormatter()));  // Always JSON — Cloud Logging parses this
+```
+
+Do not use `WriteTo.Console()` without the formatter. The `CompactJsonFormatter` from `Serilog.Formatting.Compact` produces CLEF (Compact Log Event Format) JSON that Cloud Logging understands.
+
+For the best Cloud Logging integration, each log line should be a single-line JSON object on stdout — Cloud Run captures stdout and forwards it to Cloud Logging automatically when the format is recognized.
+
 **Warning signs:**
-- `InvalidOperationException: No suitable constructor found for entity type 'Person'` at runtime.
-- Developer adds `public Person() { }` to fix the error — reopening the model to invalid state.
+- Cloud Logging shows log entries with no severity or with severity "DEFAULT" (plain text was not parsed)
+- Local `dotnet run` shows colored output — this is the plain text template, not JSON
+- `CompactJsonFormatter` gives a compile error — `Serilog.Formatting.Compact` package is missing
+- `ASPNETCORE_ENVIRONMENT` is not set in Cloud Run service configuration
 
-**Prevention strategy:**
-- Always add `private Person() { }` alongside the parameterless constructor removal. This is documented EF Core behavior — the ORM uses the most specific constructor it can, falling back to the parameterless one.
-- The private constructor satisfies EF without exposing it to application code.
-
-**Phase/layer:** Domain entity `Person`. Verified when Infrastructure (EF Core) is first wired up.
+**Phase to address:** Phase 3 (Serilog logging — OBS-01). Verify by running the container locally with `docker run` and confirming stdout lines are valid JSON (`docker logs <container> | python -m json.tool` or pipe to `jq`).
 
 ---
 
-## Phase-Specific Warnings
+## Technical Debt Patterns
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Person entity creation | Public setters + parameterless constructor satisfying EF requests | Add `private Person()` for EF, `public Person(...)` for code, `private set` everywhere |
-| Age property | Year-subtraction-only algorithm | Month+day comparison; DateOnly type; unit test edge cases |
-| IPersonRepository interface | Returning IQueryable or placing interface in Infrastructure | Place in Application; return `Task<IReadOnlyList<Person>>` |
-| EF Core DbContext setup | Data annotations on Person entity | Fluent API in `IEntityTypeConfiguration<Person>` inside Infrastructure only |
-| PATCH endpoint | JsonPatchDocument typed to domain entity | Define `UpdatePersonDto` in Application; patch applies to DTO, not entity |
-| DI registration / Startup | Injecting Infrastructure types directly into Application handlers | Program.cs wires adapters to ports; Application sees only interfaces |
-| Hexagonal labeling | Calling everything a "port" without distinguishing driving vs. driven | Controllers = driving adapters; IPersonRepository = driven port; label clearly |
-| Adding features | Reaching for MediatR, AutoMapper, FluentValidation | Ask: "does this teach the architecture, or hide it?" — prefer transparency |
+Shortcuts that seem reasonable but create long-term problems.
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Service account key JSON in GitHub secret | Simpler GCP setup (no Workload Identity Pool) | Key never expires; must be rotated manually; leakage is permanent compromise | Acceptable for a personal learning project; never for production team repos |
+| `ASPNETCORE_ENVIRONMENT=Development` in Cloud Run | Detailed error pages, Scalar UI accessible in cloud | Exposes stack traces publicly; disables production optimizations | Never — always set `Production` in Cloud Run |
+| Pinning to `latest` Docker tag for the base image | Always gets newest SDK/runtime | Non-reproducible builds; future .NET releases may break the container | Never — pin to `10.0` or a specific digest |
+| Skipping `.dockerignore` | No extra work | `.git/`, `tests/`, `**/obj/`, `**/bin/` are copied into the build context — slows build and risks leaking secrets in git history into the image | Never — always include `.dockerignore` |
+| Hardcoding Cloud Run region in workflow | Fewer variables to configure | Region change requires editing the workflow file | Acceptable for a learning project; use a variable/secret in production |
+| `dotnet publish` without `--no-restore` in CI | Simpler command | Doubles restore time; causes subtle differences between CI restore and local restore | Never in CI — always separate restore and publish steps |
+
+---
+
+## Integration Gotchas
+
+Common mistakes when connecting to external services.
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Artifact Registry (GCP) | Pushing to the wrong registry hostname — using `gcr.io` instead of the regional Artifact Registry hostname | Use `REGION-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG` format. `gcr.io` is legacy Container Registry, not Artifact Registry. |
+| Cloud Run `gcloud run deploy` | Missing `--allow-unauthenticated` flag — service deploys but all requests return 403 | Add `--allow-unauthenticated` for a public API, or configure IAM invoker role explicitly |
+| GitHub Actions `docker/build-push-action` | Build context defaults to `.` but the workflow file is in `.github/workflows/` — context is correct if the workflow's working directory is the repo root | Always set `context: .` explicitly in the build-push step |
+| Cloud Run environment variables | `ASPNETCORE_ENVIRONMENT` not set — defaults to empty string, which ASP.NET Core treats as neither Development nor Production | Set `ASPNETCORE_ENVIRONMENT=Production` in Cloud Run service environment variables |
+| Serilog + Cloud Logging | Two-level log aggregation: Cloud Run captures stdout, Cloud Logging ingests it. If Serilog also writes to a file sink, logs duplicate and the file is lost on container restart | Use only `WriteTo.Console()` in a containerized environment — never file sinks |
+| `docker-compose` local vs Cloud Run | `docker-compose` `ports` mapping hides the Cloud Run port mismatch — `ports: "8080:5000"` makes local tests pass even when the container binds to the wrong internal port | Map `8080:8080` in compose and set `ASPNETCORE_URLS=http://+:8080` in the container so local and Cloud Run behave identically |
+
+---
+
+## Performance Traps
+
+Patterns that work at small scale but fail as usage grows. (Scope note: Cloud Run autoscaling and EF InMemory make classic performance traps less relevant for this learning project — entries focus on container startup and CI/CD throughput.)
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| No `.dockerignore` — entire repo context sent to daemon | `docker build` takes 30+ seconds even for small code changes | Add `.dockerignore` excluding `**/obj`, `**/bin`, `.git`, `tests/` | Every build; gets worse as git history grows |
+| COPY entire source before restore — no layer caching | Every code change rebuilds NuGet packages from scratch (minutes per build) | COPY `.csproj` files first, run `dotnet restore`, then COPY source | Every CI run; 3-5 minute penalty per commit |
+| Cloud Run min-instances = 0 with EF InMemory + DataSeeder | First request after scale-to-zero takes 5-10 seconds (cold start + seed) | Acceptable for this project; set `--min-instances=1` if cold starts are unacceptable | Every scale-to-zero event |
+| Running `dotnet test` in the same stage as `dotnet publish` | Tests add 30-60 seconds to every deploy pipeline | Separate test job from build/push job in GitHub Actions; use job dependencies | Every deployment |
+
+---
+
+## Security Mistakes
+
+Domain-specific security issues for container deployment.
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Running the container as root (default) | If the process is compromised, attacker has root in the container | Add `USER app` to the Dockerfile runtime stage; use the non-root user from `mcr.microsoft.com/dotnet/aspnet` |
+| Storing GCP credentials in a Dockerfile `ENV` | Credentials baked into the image layer — visible in `docker history` | Never put credentials in Dockerfile; use GitHub Actions secrets + WIF or runtime env vars injected by Cloud Run |
+| `ASPNETCORE_ENVIRONMENT=Development` in Cloud Run | Scalar UI and detailed error pages are publicly accessible | Always set `Production` in Cloud Run; gate Scalar UI to `Development` only |
+| Service account with `Editor` or `Owner` role | Blast radius if credentials leak: attacker can modify entire GCP project | Grant minimum roles: `roles/run.developer` + `roles/artifactregistry.writer` for the deploy SA |
+| No `EXPOSE` in Dockerfile | Not a security issue — purely cosmetic — but misleads developers about what port the container uses | Add `EXPOSE 8080` to document the port; Cloud Run does not require it but it is correct self-documentation |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **Dockerfile builds locally:** Run `docker build -t personsapi .` from the solution root — confirm zero errors before pushing to CI.
+- [ ] **Container runs on correct port:** Run `docker run -e PORT=8080 -p 8080:8080 personsapi` and `curl http://localhost:8080/health` — confirm `200 Healthy`.
+- [ ] **Health endpoint registered before auth middleware:** In `Program.cs`, `app.MapHealthChecks("/health")` must appear before any `app.UseAuthorization()` call.
+- [ ] **JSON logs in container stdout:** Run the container and pipe stdout through `jq` — every line must be valid JSON. If any line is plain text, the Serilog formatter is wrong.
+- [ ] **DataSeeder runs on container startup:** After `docker run`, call `GET /api/persons` — confirm 3 persons are returned (María, Carlos, Ana).
+- [ ] **Cloud Run service listens on 8080:** After `gcloud run deploy`, call the Cloud Run URL — confirm `200` response. A `502` means port mismatch.
+- [ ] **GitHub Actions auth step passes:** The `google-github-actions/auth` step must complete green before any `gcloud` or `docker push` step. A red auth step means every subsequent step will silently fail or use the wrong identity.
+- [ ] **Artifact Registry push tag format correct:** Image tag must be `REGION-docker.pkg.dev/PROJECT_ID/REPO/image:SHA` — not `gcr.io/...` and not `latest`.
+- [ ] **`ASPNETCORE_ENVIRONMENT=Production` set in Cloud Run:** Verify with `gcloud run services describe personsapi --format="value(spec.template.spec.containers[0].env)"`.
+- [ ] **`.dockerignore` present:** Confirm `**/bin`, `**/obj`, `.git`, `tests/` are excluded. Build context size should be under 1 MB for this project.
+
+---
+
+## Recovery Strategies
+
+When pitfalls occur despite prevention, how to recover.
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Wrong COPY paths in Dockerfile | LOW | Fix COPY instructions; rebuild locally first; push corrected Dockerfile |
+| Cloud Run 502 (port mismatch) | LOW | Add `ENV ASPNETCORE_URLS=http://+:8080` to Dockerfile; rebuild and redeploy |
+| EF InMemory data loss after restart | NONE | Expected behavior — no recovery needed. DataSeeder restores on boot. Document and move on. |
+| Health check 404 in Cloud Run | LOW | Verify `MapHealthChecks("/health")` is in `Program.cs`; confirm path matches probe config; redeploy |
+| GitHub Actions auth failure (SA key) | LOW-MEDIUM | Regenerate and re-upload the service account key JSON; switch to WIF to prevent recurrence |
+| Plain text logs in Cloud Logging | LOW | Install `Serilog.Formatting.Compact`; change `WriteTo.Console()` to `WriteTo.Console(new CompactJsonFormatter())`; redeploy |
+| Service account key committed to git | HIGH | Revoke key immediately in GCP Console; rotate; git history scrub with `git filter-repo`; switch to WIF |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Wrong COPY paths in multi-project Dockerfile | Phase 1: Dockerfile (DOCK-01) | `docker build` succeeds from solution root; all 4 project layers resolve |
+| Cloud Run port mismatch (5000 vs 8080) | Phase 1: Dockerfile (DOCK-01) | `docker run -e PORT=8080 -p 8080:8080 personsapi` + `curl /health` returns 200 |
+| EF InMemory data loss on restart | Phase 2: Cloud Run deploy (CLOUD-01) | Documented expectation; DataSeeder verified on startup; no spurious "fix" attempted |
+| Health check path misconfiguration | Phase 3: Health endpoint (OBS-02) | `curl http://localhost:8080/health` returns `200 Healthy` in Docker; Cloud Run probe green |
+| GitHub Actions GCP auth (key vs WIF) | Phase 4: CI/CD pipeline (CICD-01) | Auth step completes green; no credentials in repository or Dockerfile |
+| Serilog not outputting JSON | Phase 3: Serilog logging (OBS-01) | Container stdout lines are valid JSON; Cloud Logging shows severity field populated |
+| Container running as root | Phase 1: Dockerfile (DOCK-01) | `docker inspect` shows non-root USER; `whoami` in container returns `app` |
+| Missing `.dockerignore` | Phase 1: Dockerfile (DOCK-01) | Build context size < 1 MB; `docker build` output shows correct context size |
 
 ---
 
 ## Sources
 
-- [Clean Architecture in .NET 10: The Infrastructure Layer — EF Core Without the Leakage](https://dev.to/bspann/clean-architecture-in-net-10-the-infrastructure-layer-ef-core-without-the-leakage-55dn) — HIGH confidence (DEV, .NET 10 specific)
-- [3 Ways To Avoid An Anemic Domain Model In Entity Framework](https://www.devtrends.co.uk/blog/3-ways-to-avoid-an-anemic-domain-model-in-ef-core) — HIGH confidence (EF Core focused, practical code examples)
-- [The Real Difference Between Domain and Application Layer in Clean Architecture](https://bytecrafted.dev/domain-vs-application-layer-clean-architecture/) — HIGH confidence (concrete C# examples verified)
-- [JsonPatch in ASP.NET Core web API — Microsoft Learn (.NET 10)](https://learn.microsoft.com/en-us/aspnet/core/web-api/jsonpatch?view=aspnetcore-10.0) — HIGH confidence (official Microsoft documentation)
-- [When (not) use JSON Patch in ASP.NET Core](https://inwedo.com/blog/when-not-use-json-patch-in-asp-net-core/) — MEDIUM confidence (real-world testimony, single source)
-- [Comparison of Ports in Hexagonal Architecture and Interfaces in Clean Architecture](https://leaders.tec.br/article/8793e4) — MEDIUM confidence (conceptual analysis, not .NET-specific)
-- [DDD + Clean Architecture: Stop Putting Business Logic in the Application Layer](https://journal.optivem.com/p/ddd-clean-architecture-dont-put-business-logic-in-application-layer) — HIGH confidence (widely cited, matches official Clean Architecture doctrine)
-- [EF Core: Effectively decouple the data and domain model](https://dev.to/thecodewrapper/ef-core-effectively-decouple-the-data-and-domain-model-4h8j) — HIGH confidence (.NET specific, IQueryable analysis verified)
-- [How to calculate age in C#](https://www.clintmcmahon.com/blog/how-to-calculate-age-in-c) — MEDIUM confidence (algorithm verified against multiple sources)
-- [How to use DateOnly and TimeOnly — Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/standard/datetime/how-to-use-dateonly-timeonly) — HIGH confidence (official Microsoft documentation)
-- [Rich vs Anemic domain model](https://medium.com/@mr.karegar/rich-vs-anemic-domain-model-d4bd8cbe221a) — MEDIUM confidence (conceptual, corroborated by other sources)
-- [Hexagonal Architecture and Clean Architecture (with examples)](https://dev.to/dyarleniber/hexagonal-architecture-and-clean-architecture-with-examples-48oi) — MEDIUM confidence (examples, not .NET 10 specific)
+- [Google Cloud Run container contract — Port and startup requirements](https://cloud.google.com/run/docs/container-contract) — HIGH confidence (official Google documentation; PORT env var injection and 8080 default are explicitly specified)
+- [Containerize a .NET app — Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/core/docker/build-container) — HIGH confidence (official Microsoft Docker guidance for multi-project .NET solutions)
+- [.NET Docker samples — GitHub (dotnet/dotnet-docker)](https://github.com/dotnet/dotnet-docker/tree/main/samples/aspnetapp) — HIGH confidence (official multi-project Dockerfile pattern with solution-root context and per-csproj COPY)
+- [Serilog.Formatting.Compact — NuGet + GitHub](https://github.com/serilog/serilog-formatting-compact) — HIGH confidence (official Serilog org; CompactJsonFormatter is the canonical JSON formatter for console sinks)
+- [Serilog.AspNetCore — GitHub](https://github.com/serilog/serilog-aspnetcore) — HIGH confidence (official Serilog ASP.NET Core integration; UseSerilog() API)
+- [GitHub Actions — Configuring OpenID Connect in Google Cloud Platform](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-google-cloud-platform) — HIGH confidence (official GitHub documentation for WIF with GCP)
+- [google-github-actions/auth — GitHub](https://github.com/google-github-actions/auth) — HIGH confidence (official GCP-maintained GitHub Action; WIF and SA key JSON both documented)
+- [ASP.NET Core health checks — Microsoft Learn](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks) — HIGH confidence (official Microsoft docs; MapHealthChecks API and middleware ordering)
+- [Cloud Run — Configure health checks](https://cloud.google.com/run/docs/configuring/healthchecks) — HIGH confidence (official Google documentation; liveness and readiness probe HTTP path configuration)
+- [Deploying to Cloud Run with GitHub Actions — Google Cloud Blog](https://cloud.google.com/blog/products/devops-sre/deploy-to-cloud-run-with-github-actions) — MEDIUM confidence (official blog but may lag latest action versions; verify action versions against google-github-actions/deploy-cloudrun)
+
+---
+*Pitfalls research for: Containerizing a multi-project .NET 10 solution and deploying to Google Cloud Run with GitHub Actions CI/CD*
+*Researched: 2026-06-01*

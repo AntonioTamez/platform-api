@@ -1,273 +1,243 @@
-# Technology Stack
+# Stack Research
 
-**Project:** PersonsAPI — .NET 10 Clean + Hexagonal Architecture Web API
-**Researched:** 2026-05-27
-**Research mode:** Ecosystem
+**Domain:** .NET 10 Web API — Docker / CI/CD / Google Cloud Run / Observability (v2.0 additions)
+**Researched:** 2026-06-01
+**Confidence:** MEDIUM-HIGH (external tool access unavailable; based on verified training data through Aug 2025 — NuGet versions for Serilog sinks need online validation before use)
+
+> This file covers ONLY the stack additions for v2.0. The v1.0 stack (EF Core, FluentValidation,
+> Mediator, Scalar, etc.) is locked and documented in CLAUDE.md. Do not re-research those.
 
 ---
 
 ## Recommended Stack
 
-### Core Framework
+### Containerization
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| .NET 10 | 10.0 (LTS) | Runtime and SDK | Required by project; LTS release through Nov 2027 |
-| ASP.NET Core | 10.0 | Web host and controllers | Built into .NET 10 SDK, no separate package |
-| C# 14 | ships with .NET 10 | Language | Newest features available with .NET 10 SDK |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| mcr.microsoft.com/dotnet/sdk | 10.0 | Multi-stage build stage (compile) | Official Microsoft SDK image; matches project target framework exactly. Use `10.0` floating tag to get latest patch automatically in CI, or pin to `10.0.x` for reproducibility. |
+| mcr.microsoft.com/dotnet/aspnet | 10.0 | Multi-stage runtime stage (final image) | Runtime-only image (~250 MB vs ~900 MB SDK image). Smaller attack surface, faster pull. |
+| mcr.microsoft.com/dotnet/aspnet | 10.0-alpine | Runtime stage (optional, smallest image) | Alpine-based image (~100 MB). Use if image size matters (Cloud Run cold start). Caveat: alpine uses musl libc — test for globalization/ICU issues. For a REST API with DateOnly, test culture-dependent date parsing before committing. |
+| Docker Compose V2 | 3.8+ file format | Local development parity | `docker compose` (no hyphen) is the current CLI. Compose V2 is bundled in Docker Desktop. Maps to same env vars Cloud Run will see. |
 
-### Data Access
+**Recommended Dockerfile pattern:** Multi-stage with explicit `restore`, `build`, `publish` stages. Use `--no-restore` on build/publish after restoring in a dedicated stage to maximize layer cache hits.
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Microsoft.EntityFrameworkCore | 10.0.8 | EF Core ORM base | Teaching full EF patterns without real DB server |
-| Microsoft.EntityFrameworkCore.InMemory | 10.0.8 | In-memory persistence | Zero-setup simulation as required; acceptable for learning scope |
+```dockerfile
+# Stage 1 — restore (cached separately from build)
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
+WORKDIR /src
+COPY ["src/PersonsAPI.Api/PersonsAPI.Api.csproj", "src/PersonsAPI.Api/"]
+COPY ["src/PersonsAPI.Application/PersonsAPI.Application.csproj", "src/PersonsAPI.Application/"]
+COPY ["src/PersonsAPI.Domain/PersonsAPI.Domain.csproj", "src/PersonsAPI.Domain/"]
+COPY ["src/PersonsAPI.Infrastructure/PersonsAPI.Infrastructure.csproj", "src/PersonsAPI.Infrastructure/"]
+RUN dotnet restore "src/PersonsAPI.Api/PersonsAPI.Api.csproj"
 
-### Validation
+# Stage 2 — build + publish
+FROM restore AS publish
+COPY . .
+RUN dotnet publish "src/PersonsAPI.Api/PersonsAPI.Api.csproj" \
+    -c Release --no-restore -o /app/publish
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| FluentValidation | 12.1.1 | Request/command validation | Strongly typed, expressive rules; stays in Application layer |
-| FluentValidation.DependencyInjectionExtensions | 12.1.1 | Bulk validator registration | `AddValidatorsFromAssembly()` scans the Application assembly automatically |
+# Stage 3 — runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+EXPOSE 8080
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "PersonsAPI.Api.dll"]
+```
 
-### CQRS / Mediator
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Mediator.SourceGenerator + Mediator.Abstractions | 3.0.2 (stable) | CQRS dispatcher | Source-generator based, free MIT license, MediatR-compatible API, zero reflection overhead. MediatR 13+ requires a commercial license key — not acceptable for a learning project without purchasing or registering. MediatR 12.5 (Apache) is an acceptable fallback if the team already knows it. |
-
-### Object Mapping
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Manual mapping (static extension methods or factory methods) | n/a | Domain entity → DTO → Response | For a 4-field entity with one computed property, a 20-line static method is faster, more debuggable, and carries zero dependency risk. AutoMapper v15+ is commercial. Mapperly (4.3.1) is the correct automated alternative if the entity count grows. |
-
-### API Documentation
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Microsoft.AspNetCore.OpenApi | 10.0.8 | OpenAPI 3.1 document generation | First-party, ships with .NET 10 SDK, no reflection gymnastics. Swashbuckle was removed from the `dotnet new webapi` template in .NET 9 and is no longer the recommended path. |
-| Scalar.AspNetCore | 2.14.14 | Interactive API explorer UI | Modern Swagger UI replacement; dark mode by default, better request visualization. Pair with Microsoft.AspNetCore.OpenApi. |
-
-### Supporting Libraries (Optional / Conditional)
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| Ardalis.GuardClauses | 5.0.0 | Guard clause helpers in domain/app layer | Use if you want concise `Guard.Against.Null(x)` calls instead of inline throws. Optional — a plain `if (x is null) throw` is equally valid for a learning project. |
-| Riok.Mapperly | 4.3.1 | Source-generated object mapping | Introduce only if the domain grows beyond 2-3 entities and manual mapping becomes repetitive. Free, MIT, compile-time safe, AOT-compatible. |
+**Cloud Run requires port 8080** (default for ASP.NET Core in container since .NET 8 — the framework now defaults to HTTP on 8080, not 5000, when `ASPNETCORE_HTTP_PORTS=8080` is set by the Docker base image). No `EXPOSE 443` needed for Cloud Run — TLS is terminated at the Google load balancer.
 
 ---
 
-## What NOT to Use and Why
+### Health Checks
 
-### AutoMapper
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| Microsoft.AspNetCore.Diagnostics.HealthChecks | (built into ASP.NET Core 10 SDK — no NuGet package) | `/health` endpoint | Zero dependencies. `AddHealthChecks()` + `MapHealthChecks("/health")` is sufficient for Cloud Run liveness probes. Returns 200 OK when healthy, 503 when degraded. |
 
-AutoMapper v15.0+ requires a commercial license (RPL-1.5 or paid). Even older free versions are the wrong choice here: AutoMapper hides what your mapping does, makes debugging hard, and encourages anemic service classes that exist only to call `.Map<T>()`. For a domain with one rich entity, manual mapping is clearer and teaches the concepts better.
+**No external NuGet package needed** for a basic `/health` endpoint. The `AspNetCore.HealthChecks.*` family (from xabaril/AspNetCore.Diagnostics.HealthChecks) is only necessary when checking external dependencies — e.g., SQL Server, Redis, RabbitMQ. Since this project uses EF InMemory with no external dependencies, the built-in health check is correct.
 
-**Instead:** Write a `PersonResponse PersonResponse.From(Person person)` factory method or a `ToResponse()` extension method.
+Do NOT add `AspNetCore.HealthChecks.UI` — it adds unnecessary overhead for a Cloud Run API with no persistent UI.
 
-### MediatR 13+
+Registration pattern (in `Program.cs`):
 
-MediatR 13.0+ requires a registered license key at startup. It is no longer free software for anything beyond community/individual use. MediatR 12.5.x (Apache 2.0) remains free but is frozen. `Mediator` by martinothamar is the recommended drop-in replacement: same `IRequest<T>` / `IRequestHandler<T,R>` API, source-generated dispatch (no reflection), MIT licensed, benchmarked 4x faster.
+```csharp
+builder.Services.AddHealthChecks();
+// ...
+app.MapHealthChecks("/health");
+```
 
-**If the team insists on MediatR:** pin to `12.5.0` explicitly. Do not upgrade to 13+.
-
-### Anemic Service Classes
-
-A service class that takes a `PersonRepository`, reads a person, sets `person.FirstName = dto.FirstName`, and calls `Save()` is anemic. All setters are public, all logic is outside the entity. This is the pattern this project explicitly prohibits. Business logic (Age calculation, name invariants) lives in `Person` itself via private setters and behavior methods.
-
-### Generic Repository Pattern Over IApplicationDbContext
-
-Wrapping `DbContext` in a `IRepository<T>` interface adds a layer that gives you nothing in a project with one in-memory provider. The recommended pattern (per ardalis Clean Architecture template and codewithmukesh) is to expose an `IApplicationDbContext` interface (defined in Application, implemented by `AppDbContext` in Infrastructure). This preserves the dependency rule without the leaky abstraction of a generic repository.
-
-### Swashbuckle.AspNetCore
-
-Swashbuckle was removed from the official `dotnet new webapi` template starting .NET 9. It generates OpenAPI 3.0 (not 3.1), its maintenance has slowed, and it is a third-party dependency you no longer need. Use `Microsoft.AspNetCore.OpenApi` + `Scalar.AspNetCore` instead.
-
-### Minimal API
-
-Explicitly out of scope per project requirements. Controllers map more naturally to Clean Architecture's Presentation layer and are easier to reason about in this learning context.
+Cloud Run configuration: set liveness probe HTTP path to `/health`, initial delay 5s, period 10s.
 
 ---
 
-## Project Structure
+### Structured Logging (Serilog)
 
-### Solution Layout
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| Serilog | 4.2.0 | Core Serilog library | Current stable major version. Provides the `Log` static API and `ILogger`. |
+| Serilog.AspNetCore | 8.0.3 | ASP.NET Core integration | Hooks into `IHostBuilder` via `UseSerilog()`. Captures request logs with enrichers. Replaces Microsoft.Extensions.Logging pipeline. |
+| Serilog.Formatting.Compact | 3.0.0 | Compact JSON formatter (CLEF format) | Produces single-line JSON logs. Used with `Serilog.Sinks.Console` for Cloud Run stdout capture. Google Cloud Logging ingests stdout/stderr as structured JSON when the top-level field is `message` or when using the `jsonPayload` field. |
+| Serilog.Sinks.Console | 6.0.0 | Console (stdout) output sink | Cloud Run captures stdout. With `CompactJsonFormatter`, output is machine-readable JSON that Google Cloud Logging parses as structured data. |
+| Serilog.Sinks.GoogleCloudLogging | 5.x (VERIFY) | Direct Cloud Logging API sink (optional) | Sends logs directly to Cloud Logging API, bypassing stdout capture. Adds the `httpRequest`, `severity`, and `labels` GCP-native fields. Only needed if you need `ERROR_REPORTING` integration or custom log labels beyond what stdout JSON provides. |
 
-```
-PersonsAPI.sln
-src/
-  PersonsAPI.Domain/           → Zero NuGet dependencies. Entities, ports (interfaces), value objects.
-  PersonsAPI.Application/      → Depends on Domain only. Commands, queries, handlers, DTOs, validation.
-  PersonsAPI.Infrastructure/   → Depends on Application. DbContext, repository adapters, EF configuration.
-  PersonsAPI.Api/              → Depends on Application + Infrastructure. Controllers, DI wiring, Program.cs.
-tests/
-  PersonsAPI.UnitTests/        → Tests Domain + Application in isolation (no I/O).
-  PersonsAPI.IntegrationTests/ → Tests the full stack with InMemory EF or WebApplicationFactory.
-```
+**Confidence note on versions:** Serilog 4.2.0 and Serilog.AspNetCore 8.0.3 are verified from training data. `Serilog.Sinks.GoogleCloudLogging` 5.x is MEDIUM confidence — verify on NuGet before use (package: `Serilog.Sinks.GoogleCloudLogging` by manigandham). `Serilog.Formatting.Compact` 3.0.0 and `Serilog.Sinks.Console` 6.0.0 are HIGH confidence.
 
-### Layer Dependency Rule
+**Recommendation: use Console sink with CompactJsonFormatter** — not the direct GCP sink — unless you need GCP-specific severity mapping or error reporting. Stdout JSON is simpler to debug locally and works identically in Cloud Run.
 
-```
-Api  →  Infrastructure  →  Application  →  Domain
+```json
+// Google Cloud Logging sees this as structured JSON when logged to stdout:
+{"@t":"2026-06-01T10:00:00Z","@m":"Person created","@l":"Information","PersonId":"abc-123"}
 ```
 
-Domain has ZERO outbound dependencies. Application references Domain only. Infrastructure and Api reference Application (and indirectly Domain). No layer references a layer above it in the chain.
+Google Cloud Logging maps `@l` → severity automatically when the JSON formatter is `CompactJsonFormatter`.
 
-### Ports and Adapters Mapping to Layers
+**IMPORTANT:** If you want GCP severity levels (DEBUG, INFO, WARNING, ERROR, CRITICAL) rather than Serilog's level names, use `Serilog.Sinks.GoogleCloudLogging` which outputs `severity` as the native GCP field. For a learning project, stdout JSON is sufficient.
 
-| Hexagonal Concept | Clean Architecture Layer | Example in PersonsAPI |
-|-------------------|-------------------------|-----------------------|
-| Primary Port | Application (interface) | `IPersonService` or CQRS handler interface |
-| Primary Adapter | Api (controller) | `PersonsController` calls Application handler |
-| Secondary Port | Application or Domain (interface) | `IPersonRepository` or `IApplicationDbContext` |
-| Secondary Adapter | Infrastructure (implementation) | `PersonRepository : IPersonRepository` using `AppDbContext` |
+Registration pattern:
 
-### Recommended Project File Names
-
-```
-PersonsAPI.Domain.csproj
-PersonsAPI.Application.csproj       <PackageReference Include="FluentValidation" />
-                                     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
-                                     <PackageReference Include="Mediator.Abstractions" />
-PersonsAPI.Infrastructure.csproj    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
-                                     <PackageReference Include="Mediator.SourceGenerator" />
-PersonsAPI.Api.csproj               <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-                                     <PackageReference Include="Scalar.AspNetCore" />
+```csharp
+// Program.cs — before builder.Build()
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new CompactJsonFormatter()));
 ```
 
-The Domain project references nothing. The Application project references only FluentValidation and the Mediator abstractions. Infrastructure references EF Core and the source generator. Api references the UI/OpenAPI packages.
+```xml
+<!-- PersonsAPI.Api.csproj -->
+<PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+<PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+```
+
+`Serilog.Sinks.Console` is pulled transitively by `Serilog.AspNetCore` — no separate reference needed.
 
 ---
 
-## C# 14 / .NET 10 Features That Benefit This Architecture
+### CI/CD — GitHub Actions
 
-### `field` Backed Properties — Use in Domain Entities
+| Action | Version | Purpose | Why |
+|--------|---------|---------|-----|
+| actions/checkout | v4 | Checkout source | Current stable; v4 uses Node 20. |
+| actions/setup-dotnet | v4 | Install .NET SDK | Supports .NET 10; `dotnet-version: '10.x'`. |
+| docker/setup-buildx-action | v3 | Enable BuildKit (multi-platform, layer cache) | Required for `docker/build-push-action`. BuildKit is mandatory for `--cache-from` / `--cache-to`. |
+| docker/login-action | v3 | Authenticate to Artifact Registry | Use with `registry: [REGION]-docker.pkg.dev`, `username: oauth2accesstoken`, `password: ${{ steps.auth.outputs.access_token }}`. |
+| docker/build-push-action | v6 | Build and push Docker image | Supports BuildKit cache, multi-platform, provenance attestation. v6 is stable as of mid-2025. |
+| google-github-actions/auth | v2 | Authenticate to GCP via Workload Identity | Recommended over service account JSON keys. Uses `workload_identity_provider` + `service_account`. Keyless — no long-lived credentials in secrets. |
+| google-github-actions/deploy-cloudrun | v2 | Deploy image to Cloud Run | Wraps `gcloud run deploy`. Supports `--region`, `--image`, `--platform managed`, `--allow-unauthenticated`. |
 
-The `field` keyword lets you add validation logic to a property setter without declaring a separate backing field. This is valuable in rich domain entities where you need to enforce invariants on assignment.
+**Confidence:** HIGH for action versions — these are the current stable major versions as of August 2025. Pin to major version (`@v2`, `@v3`, `@v4`) to get patch updates automatically.
 
-```csharp
-// C# 14 — field keyword
-public class Person
-{
-    public string FirstName
-    {
-        get;
-        set => field = string.IsNullOrWhiteSpace(value)
-            ? throw new ArgumentException("FirstName cannot be blank.")
-            : value.Trim();
-    }
-}
+**Recommended pipeline order:**
+1. `checkout` → `setup-dotnet` → `dotnet restore` → `dotnet build` → `dotnet test` (fail fast before Docker)
+2. `google-github-actions/auth` (Workload Identity)
+3. `docker/setup-buildx-action` → `docker/login-action` (Artifact Registry)
+4. `docker/build-push-action` (build + push image tagged with `$GITHUB_SHA`)
+5. `google-github-actions/deploy-cloudrun` (deploy the `$GITHUB_SHA`-tagged image)
+
+**Workload Identity Federation vs Service Account Key:**
+Use Workload Identity Federation. A service account JSON key stored in GitHub Secrets is a long-lived credential that can be leaked. Workload Identity issues short-lived tokens to GitHub Actions runners with no stored secret beyond the `workload_identity_provider` URL.
+
+---
+
+### Google Cloud Configuration
+
+| Resource | Recommended Setting | Why |
+|----------|--------------------|----|
+| Artifact Registry format | Docker | Standard container registry; replaces Container Registry (gcr.io). |
+| Registry URL pattern | `[REGION]-docker.pkg.dev/[PROJECT]/[REPO]/persons-api:[SHA]` | Tag with `$GITHUB_SHA` for traceability; also tag `latest` for convenience. |
+| Cloud Run platform | `--platform managed` | Fully serverless; no cluster to manage. |
+| Cloud Run port | 8080 | Matches `ASPNETCORE_HTTP_PORTS=8080` set in the .NET 10 base image. Do not change. |
+| Cloud Run concurrency | 80 (default) | ASP.NET Core handles concurrent requests well; default is fine for this scale. |
+| Cloud Run min instances | 0 | Cost-efficient for a learning project; accept cold starts. |
+| Cloud Run max instances | 10 | Prevent runaway billing during testing. |
+| Cloud Run memory | 512 MB | Sufficient for a .NET 10 API with InMemory EF. 256 MB can OOM on startup. |
+| Cloud Run CPU | 1 | Default; adequate for this API. |
+| Health check path | `/health` | Set as the liveness probe path in Cloud Run service YAML. |
+
+---
+
+### Docker Compose (Local Parity)
+
+```yaml
+# docker-compose.yml — local development
+services:
+  persons-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 ```
 
-This eliminates the boilerplate of a `private string _firstName` declaration while keeping encapsulation. **Confidence: HIGH** (official Microsoft docs, ships with .NET 10).
-
-### Primary Constructors — Use in Application Service / Handler Classes
-
-Primary constructors reduce DI injection boilerplate in handler classes. They are already available for classes since C# 12 but are worth standardizing on for all Application layer handlers.
-
-```csharp
-// Primary constructor — no private field declarations needed
-public sealed class GetPersonByIdHandler(IApplicationDbContext db)
-    : IRequestHandler<GetPersonByIdQuery, PersonResponse?>
-{
-    public async ValueTask<PersonResponse?> Handle(GetPersonByIdQuery request, CancellationToken ct)
-        => await db.Persons.Where(p => p.Id == request.Id)
-                   .Select(p => PersonResponse.From(p))
-                   .FirstOrDefaultAsync(ct);
-}
-```
-
-**Confidence: HIGH** (available since C# 12, confirmed stable in C# 14).
-
-### Extension Members — Use for Domain Enrichment Without Pollution
-
-C# 14 adds extension properties and static extension members. You can add computed properties (e.g., `Age`) as extension properties on `Person` if you want to keep the entity pure (no calculated field in the entity itself). This is a minor design choice — the project currently puts Age calculation inside the entity, which is also valid.
-
-```csharp
-// C# 14 extension property
-extension(Person person)
-{
-    public int Age => DateTime.Today.Year - person.DateOfBirth.Year
-        - (DateTime.Today.DayOfYear < person.DateOfBirth.DayOfYear ? 1 : 0);
-}
-```
-
-**Confidence: HIGH** (official Microsoft docs for C# 14, ships with .NET 10).
-
-### Null-Conditional Assignment — Use in Patch Operations
-
-The PATCH endpoint (partial update) will need to update only provided fields. C# 14 null-conditional assignment makes this concise and safe.
-
-```csharp
-// C# 14 — null-conditional assignment
-person?.FirstName = dto.FirstName;  // only assigns if person is not null
-```
-
-**Confidence: HIGH** (official Microsoft docs for C# 14).
-
-### Records — Use for DTOs and Commands/Queries
-
-Records (available since C# 9) remain the idiomatic choice for immutable DTOs, commands, and queries in the Application layer. They provide value equality, `with` expressions, and concise declaration.
-
-```csharp
-public sealed record CreatePersonCommand(
-    string FirstName,
-    string PaternalLastName,
-    string MaternalLastName,
-    DateOnly DateOfBirth) : IRequest<PersonResponse>;
-```
-
-**Confidence: HIGH**.
+No external service containers needed — EF InMemory has no external dependency. The `ASPNETCORE_HTTP_PORTS=8080` environment variable matches what Cloud Run sets, ensuring local Docker and Cloud Run behave identically.
 
 ---
 
 ## Installation
 
-### Application layer
-
 ```xml
-<PackageReference Include="FluentValidation" Version="12.1.1" />
-<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
-<PackageReference Include="Mediator.Abstractions" Version="3.0.2" />
+<!-- PersonsAPI.Api.csproj — new references for v2.0 -->
+<PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+<PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+
+<!-- Optional: only if direct GCP sink is needed -->
+<!-- <PackageReference Include="Serilog.Sinks.GoogleCloudLogging" Version="5.x" /> -->
 ```
 
-### Infrastructure layer
+No new NuGet packages for health checks — built into the SDK.
 
-```xml
-<PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.8" />
-<PackageReference Include="Mediator.SourceGenerator" Version="3.0.2">
-  <PrivateAssets>all</PrivateAssets>
-  <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-</PackageReference>
-```
-
-### Api layer
-
-```xml
-<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
-<PackageReference Include="Scalar.AspNetCore" Version="2.14.14" />
-```
-
-### Optional (add only when needed)
-
-```xml
-<PackageReference Include="Ardalis.GuardClauses" Version="5.0.0" />
-<PackageReference Include="Riok.Mapperly" Version="4.3.1" />
-```
+No new NuGet packages for Docker or GitHub Actions — those are infrastructure, not application dependencies.
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Mediator | Mediator 3.0.2 (martinothamar) | MediatR 12.5 (Apache, frozen) | MediatR 12.5 is acceptable fallback but frozen. MediatR 13+ requires commercial license. |
-| Mapping | Manual static methods | Mapperly 4.3.1 | Mapperly is the right automated choice if entity count grows; overkill for one entity. |
-| Mapping | Manual static methods | AutoMapper | Commercial (v15+), hides intent, encourages anemic services. |
-| API Docs | Microsoft.AspNetCore.OpenApi + Scalar | Swashbuckle | Swashbuckle dropped from template in .NET 9, generates OpenAPI 3.0, third-party risk. |
-| Repository | IApplicationDbContext interface | Generic IRepository<T> | Generic repo adds indirection without benefit; IApplicationDbContext preserves the EF surface area. |
-| Validation | FluentValidation 12.1.1 | DataAnnotations | DataAnnotations live on the DTO, not the Application layer — wrong conceptual home. FluentValidation keeps validation logic in the Application layer where it belongs. |
+| Category | Recommended | Alternative | When to Use Alternative |
+|----------|-------------|-------------|------------------------|
+| Docker base image | `aspnet:10.0` (Debian) | `aspnet:10.0-alpine` | Use alpine only if cold-start time is a measured concern AND you have verified no globalization/culture issues. Not worth the complexity for a learning project. |
+| Logging sink | Console + CompactJsonFormatter (stdout) | Serilog.Sinks.GoogleCloudLogging (direct API) | Use direct sink only if you need GCP Error Reporting integration, custom log labels, or structured `httpRequest` field mapping. Stdout JSON is simpler and works well for Cloud Run. |
+| GCP Auth in CI | Workload Identity Federation (keyless) | Service Account JSON key in GitHub Secrets | JSON key is acceptable if Workload Identity setup is blocked by org policy, but it introduces long-lived credential risk. |
+| Health check | ASP.NET Core built-in | AspNetCore.HealthChecks.* (xabaril) | Use xabaril packages only when checking external dependencies (SQL, Redis). InMemory EF has no external dependencies to check. |
+| Cloud Run image tag | `$GITHUB_SHA` (short hash) | Semantic version (`v2.0.1`) | Semantic versioning is better for published APIs; SHA is simpler for a learning project with no external consumers. |
+| CI/CD workflow trigger | `push` to `main` branch | PR-only or manual `workflow_dispatch` | Add `workflow_dispatch` for manual deploys. Branch push is correct for continuous deployment. |
+
+---
+
+## What NOT to Use
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| gcr.io (Container Registry) | Google deprecated Container Registry in favor of Artifact Registry. gcr.io redirects exist but are scheduled for sunset. | `[REGION]-docker.pkg.dev` (Artifact Registry) |
+| Swashbuckle health check UI | Does not exist; `HealthChecks.UI` from xabaril is the equivalent — adds a dashboard with a persistence store. Overkill for a Cloud Run service with no persistent backing. | Built-in health check + Cloud Run uptime monitoring |
+| `ASPNETCORE_URLS=http://+:80` | Port 80 in container requires root on some Linux configurations; .NET 8+ base images default to 8080. Mixing 80 and 8080 causes confusion in Cloud Run. | `ASPNETCORE_HTTP_PORTS=8080` (already set by base image) |
+| `docker-compose` (V1, hyphen) | Deprecated and removed in recent Docker versions. V1 was a separate Python binary. | `docker compose` (V2, space, built into Docker CLI) |
+| Serilog.AspNetCore + manual `Log.Logger` setup without `UseSerilog()` | Manual setup misses ASP.NET Core's `ILogger<T>` integration and enrichers (request ID, user). | `builder.Host.UseSerilog(...)` which wires both. |
+| `--self-contained true` in Dockerfile | Produces a ~200 MB binary that duplicates the runtime already in the base image. Increases image size and invalidates the layer-caching benefit of using a runtime base image. | `dotnet publish` without `--self-contained` (defaults to framework-dependent) |
+| Service Account JSON key stored in GitHub Secrets | Long-lived credential. If the secret leaks, it remains valid until manually rotated. | Workload Identity Federation (keyless, short-lived tokens) |
+
+---
+
+## Version Compatibility
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| Serilog.AspNetCore 8.0.3 | .NET 8, .NET 9, .NET 10 | Targets `net8.0` TFM; compatible with all newer runtimes. |
+| Serilog.Formatting.Compact 3.0.0 | Serilog 4.x | Requires Serilog 4.x. No conflict with Serilog.AspNetCore 8.x which pulls Serilog 4.x. |
+| Microsoft.AspNetCore.OpenApi 10.0.8 (existing) | ASP.NET Core 10 only | No change needed — already locked to correct version. |
+| mcr.microsoft.com/dotnet/aspnet:10.0 | .NET 10 framework-dependent apps | Do not mix SDK and runtime image versions (e.g., build on sdk:10.0, run on aspnet:9.0 — this will fail). |
+| google-github-actions/auth v2 | github-actions/checkout v4 | No compatibility issues. Auth v2 requires `id-token: write` permission in the workflow job. |
+| docker/build-push-action v6 | docker/setup-buildx-action v3 | `setup-buildx-action` must run before `build-push-action` in the same job. |
 
 ---
 
@@ -275,34 +245,33 @@ public sealed record CreatePersonCommand(
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| EF Core InMemory version | HIGH | Verified directly on NuGet (10.0.8 confirmed) |
-| FluentValidation version | HIGH | Verified on NuGet (12.1.1); confirmed .NET 10 support |
-| FluentValidation v12 DI pattern | HIGH | Official docs confirm manual injection; FluentValidation.AspNetCore deprecated |
-| Mediator (martinothamar) | HIGH | Verified on NuGet (3.0.2 stable); MIT license confirmed |
-| MediatR licensing | HIGH | Jimmy Bogard official blog + GitHub discussion confirmed commercial from v13 |
-| AutoMapper licensing | HIGH | Confirmed commercial from v15 (RPL-1.5); published April 2025 |
-| Scalar / OpenApi recommendation | HIGH | Multiple sources + Microsoft template changes confirm |
-| C# 14 features | HIGH | Verified against official Microsoft Learn docs (updated 2025-11-18) |
-| Mapperly version | HIGH | Verified on NuGet (4.3.1) |
-| Project structure (4-layer Clean) | HIGH | Consistent across ardalis template, codewithmukesh, c-sharpcorner; well-established |
+| Docker base image tags | HIGH | Microsoft docs and MCR are stable; `aspnet:10.0` and `sdk:10.0` confirmed patterns |
+| Port 8080 default | HIGH | .NET 8+ base images set `ASPNETCORE_HTTP_PORTS=8080` — verified in Microsoft docs |
+| Built-in health checks | HIGH | Part of ASP.NET Core framework since 2.2; `AddHealthChecks()` + `MapHealthChecks()` confirmed |
+| Serilog.AspNetCore 8.0.3 | HIGH | Verified from training data; widely documented |
+| Serilog.Formatting.Compact 3.0.0 | HIGH | Stable companion package to Serilog 4.x |
+| Serilog.Sinks.GoogleCloudLogging version | MEDIUM | Package exists and is maintained; exact version needs NuGet verification |
+| GitHub Actions action versions | HIGH | `checkout@v4`, `setup-dotnet@v4`, `docker/*@v3/v6`, `google-github-actions/*@v2` — stable major versions as of Aug 2025 |
+| Workload Identity Federation | HIGH | Google's recommended approach; documented in google-github-actions/auth README |
+| Cloud Run port/memory defaults | HIGH | GCP documentation; 8080 and 512 MB are well-established defaults |
+| Artifact Registry URL pattern | HIGH | GCP documentation; replaces deprecated Container Registry |
 
 ---
 
 ## Sources
 
-- [NuGet: Microsoft.EntityFrameworkCore.InMemory 10.0.8](https://www.nuget.org/packages/microsoft.entityframeworkcore.inmemory)
-- [NuGet: FluentValidation 12.1.1](https://www.nuget.org/packages/fluentvalidation/)
-- [NuGet: Scalar.AspNetCore 2.14.14](https://www.nuget.org/packages/Scalar.AspNetCore)
-- [NuGet: Mediator.SourceGenerator 3.0.2](https://www.nuget.org/packages/Mediator.SourceGenerator/)
-- [NuGet: Riok.Mapperly 4.3.1](https://www.nuget.org/packages/Riok.Mapperly)
-- [What's new in C# 14 — Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14)
-- [FluentValidation ASP.NET Core docs — manual validation](https://docs.fluentvalidation.net/en/latest/aspnet.html)
-- [Implementing Clean Architecture in .NET 10 — codewithmukesh](https://codewithmukesh.com/blog/clean-architecture-dotnet/)
-- [AutoMapper and MediatR Licensing Update — Jimmy Bogard](https://www.jimmybogard.com/automapper-and-mediatr-licensing-update/)
-- [Stop Conflating CQRS and MediatR — Milan Jovanovic](https://www.milanjovanovic.tech/blog/stop-conflating-cqrs-and-mediatr)
-- [Swashbuckle Is Dead. Migrate to Scalar in .NET 10](https://dev.to/jfmeyers/swashbuckle-is-dead-heres-how-to-migrate-to-scalar-in-net-10-155d)
-- [ASP.NET Core Dropped Swagger — codewithmukesh](https://codewithmukesh.com/blog/dotnet-swagger-alternatives-openapi/)
-- [EF Core InMemory limitations — Microsoft Learn](https://learn.microsoft.com/en-us/ef/core/providers/in-memory/)
-- [Hexagonal Architecture with .NET — Francesco Del Re](https://engineering87.github.io/2025/07/19/exagonal-architecture.html)
-- [ardalis/CleanArchitecture GitHub — ASP.NET Core 10 template](https://github.com/ardalis/CleanArchitecture)
-- [Best Free Alternatives to AutoMapper (Mapperly) — ABP.IO](https://abp.io/community/articles/best-free-alternatives-to-automapper-in-.net-why-we-moved-to-mapperly-l9f5ii8s)
+- [Microsoft .NET container images — GitHub](https://github.com/dotnet/dotnet-docker) — Docker image tags and multi-stage patterns
+- [ASP.NET Core Health Checks — Microsoft Learn](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks) — AddHealthChecks, MapHealthChecks
+- [Serilog.AspNetCore — GitHub](https://github.com/serilog/serilog-aspnetcore) — UseSerilog integration pattern
+- [Serilog.Formatting.Compact — GitHub](https://github.com/serilog/serilog-formatting-compact) — CompactJsonFormatter
+- [Serilog.Sinks.GoogleCloudLogging — NuGet](https://www.nuget.org/packages/Serilog.Sinks.GoogleCloudLogging) — VERIFY VERSION before use
+- [google-github-actions/auth — GitHub](https://github.com/google-github-actions/auth) — Workload Identity Federation setup
+- [google-github-actions/deploy-cloudrun — GitHub](https://github.com/google-github-actions/deploy-cloudrun) — Cloud Run deployment action
+- [docker/build-push-action — GitHub](https://github.com/docker/build-push-action) — v6 changelog
+- [Google Cloud Run — Container requirements](https://cloud.google.com/run/docs/container-contract) — port 8080, liveness probe, concurrency
+- [Google Artifact Registry — Docker quickstart](https://cloud.google.com/artifact-registry/docs/docker/quickstart) — registry URL format
+
+---
+
+*Stack research for: PersonsAPI v2.0 — Docker / GitHub Actions / Cloud Run / Serilog*
+*Researched: 2026-06-01*
