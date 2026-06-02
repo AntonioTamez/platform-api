@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Domain Layer** - Person entity with rich model, computed Age, factory method, and update methods — zero outbound dependencies (completed 2026-05-29)
 - [x] **Phase 2: Application Layer** - Ports, CQRS commands/queries, handlers, DTOs, and FluentValidation pipeline behavior (completed 2026-05-29)
 - [x] **Phase 3: Infrastructure Layer** - EF Core InMemory adapter, PersonDbContext, repository implementation, and data seeder (completed 2026-05-31)
-- [ ] **Phase 4: API Layer** - PersonsController, Program.cs wiring, Problem Details, OpenAPI + Scalar, and PATCH endpoint
+- [x] **Phase 4: API Layer** - PersonsController, Program.cs wiring, Problem Details, OpenAPI + Scalar, and PATCH endpoint (completed 2026-06-02)
 
 ## Phase Details
 
@@ -87,9 +87,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **UI hint**: yes
 **Plans**: 3 plans
 
-- [ ] 04-01-PLAN.md — Api project + UpdatePersonDto record→class fix + Program.cs composition root with ProblemDetails, exception handlers, Mediator+ValidationBehavior pipeline, OpenAPI, Scalar, and DataSeeder startup (ERR-01, DOC-01, DOC-02)
-- [ ] 04-02-PLAN.md — PersonNotFoundExceptionHandler + ValidationExceptionHandler (RFC 9457) + PersonsController with six actions including JsonPatch PATCH endpoint (ERR-01, ERR-02, ERR-03)
-- [ ] 04-03-PLAN.md — PersonsAPI.Api.Tests integration suite with WebApplicationFactory<Program> covering six endpoints, 404/400 Problem Details shape, OpenAPI document, and Scalar UI (ERR-01, ERR-02, ERR-03, DOC-01, DOC-02)
+- [x] 04-01-PLAN.md — Api project + UpdatePersonDto record→class fix + Program.cs composition root with ProblemDetails, exception handlers, Mediator+ValidationBehavior pipeline, OpenAPI, Scalar, and DataSeeder startup (ERR-01, DOC-01, DOC-02)
+- [x] 04-02-PLAN.md — PersonNotFoundExceptionHandler + ValidationExceptionHandler (RFC 9457) + PersonsController with six actions including JsonPatch PATCH endpoint (ERR-01, ERR-02, ERR-03)
+- [x] 04-03-PLAN.md — PersonsAPI.Api.Tests integration suite with WebApplicationFactory<Program> covering six endpoints, 404/400 Problem Details shape, OpenAPI document, and Scalar UI (ERR-01, ERR-02, ERR-03, DOC-01, DOC-02)
 
 ## Progress
 
@@ -101,4 +101,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Domain Layer | 2/2 | Complete   | 2026-05-29 |
 | 2. Application Layer | 3/3 | Complete    | 2026-05-29 |
 | 3. Infrastructure Layer | 3/3 | Complete   | 2026-05-31 |
-| 4. API Layer | 0/3 | Not started | - |
+| 4. API Layer | 3/3 | Complete    | 2026-06-02 |

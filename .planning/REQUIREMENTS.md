@@ -26,9 +26,9 @@
 
 ### Error Handling
 
-- [ ] **ERR-01**: All error responses follow RFC 9457 Problem Details format (application/problem+json) — no custom envelope for errors
-- [ ] **ERR-02**: Validation errors return 400 with Problem Details listing all field violations
-- [ ] **ERR-03**: Missing resource errors return 404 with Problem Details
+- [x] **ERR-01**: All error responses follow RFC 9457 Problem Details format (application/problem+json) — no custom envelope for errors
+- [x] **ERR-02**: Validation errors return 400 with Problem Details listing all field violations
+- [x] **ERR-03**: Missing resource errors return 404 with Problem Details
 
 ### Validation
 
@@ -44,8 +44,8 @@
 
 ### API Documentation
 
-- [ ] **DOC-01**: OpenAPI specification is generated via Microsoft.AspNetCore.OpenApi
-- [ ] **DOC-02**: Scalar interactive UI is available at /scalar for manual exploration
+- [x] **DOC-01**: OpenAPI specification is generated via Microsoft.AspNetCore.OpenApi
+- [x] **DOC-02**: Scalar interactive UI is available at /scalar for manual exploration
 
 ## v2 Requirements
 
@@ -98,11 +98,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-03 | Phase 2 | Complete |
 | INFRA-01 | Phase 3 | Complete |
 | INFRA-04 | Phase 3 | Complete |
-| ERR-01 | Phase 4 | Pending |
-| ERR-02 | Phase 4 | Pending |
-| ERR-03 | Phase 4 | Pending |
-| DOC-01 | Phase 4 | Pending |
-| DOC-02 | Phase 4 | Pending |
+| ERR-01 | Phase 4 | Complete |
+| ERR-02 | Phase 4 | Complete |
+| ERR-03 | Phase 4 | Complete |
+| DOC-01 | Phase 4 | Complete |
+| DOC-02 | Phase 4 | Complete |
 
 **Coverage:**
 
