@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 04-api-layer
 source: [04-01-SUMMARY.md, 04-02-SUMMARY.md, 04-03-SUMMARY.md]
 started: 2026-05-31T00:00:00Z
@@ -8,14 +8,7 @@ updated: 2026-05-31T00:00:00Z
 
 ## Current Test
 
-number: 10
-name: Scalar UI Accessible and Shows All Six Endpoints
-expected: |
-  Navigate to http://localhost:5000/scalar/v1 in a browser.
-  The Scalar interactive API documentation UI renders.
-  All six endpoints are visible: GET, GET/{id}, POST, PUT/{id}, PATCH/{id}, DELETE/{id}.
-  Clicking "Try" on GET /api/Persons and sending the request returns the seeded persons.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -57,18 +50,18 @@ result: pass
 
 ### 10. Scalar UI Accessible and Shows All Six Endpoints
 expected: Navigate to http://localhost:5000/scalar/v1 in a browser. The Scalar interactive API documentation UI renders. All six endpoints are visible: GET /api/Persons, GET /api/Persons/{id}, POST /api/Persons, PUT /api/Persons/{id}, PATCH /api/Persons/{id}, DELETE /api/Persons/{id}. Clicking "Try" on GET /api/Persons and sending the request returns the 3 seeded persons.
-result: [pending]
+result: pass
 
 ### 11. OpenAPI Document Accessible
 expected: GET http://localhost:5000/openapi/v1.json returns 200 with Content-Type: application/json. The body is a valid OpenAPI 3.x document containing "openapi" version field and a paths section referencing /api/Persons endpoints.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 11
-passed: 9
+passed: 11
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
 blocked: 0
 
