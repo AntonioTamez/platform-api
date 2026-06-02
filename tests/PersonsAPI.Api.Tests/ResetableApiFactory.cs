@@ -16,18 +16,28 @@ namespace PersonsAPI.Api.Tests;
 /// </summary>
 public sealed class ResetableApiFactory : WebApplicationFactory<Program>
 {
+    // Unique database name per factory instance — frozen at factory construction time
+    // so that all scopes within the same fixture share the same isolated store.
+    private readonly string _databaseName = Guid.NewGuid().ToString();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureServices(services =>
         {
-            // Remove the shared "PersonsDb" DbContext registration added by AddInfrastructure().
-            var descriptor = services.Single(d => d.ServiceType == typeof(DbContextOptions<PersonDbContext>));
-            services.Remove(descriptor);
+            // Remove ALL PersonDbContext-related registrations added by AddInfrastructure().
+            var toRemove = services
+                .Where(d =>
+                    d.ServiceType == typeof(DbContextOptions<PersonDbContext>) ||
+                    d.ServiceType == typeof(DbContextOptions) ||
+                    d.ServiceType == typeof(PersonDbContext))
+                .ToList();
+            foreach (var d in toRemove)
+                services.Remove(d);
 
-            // Re-register with a uniquely-named InMemory database so each factory instance
-            // (and therefore each test class fixture) gets its own isolated in-memory store.
+            // Re-register with the fixed unique database name so that all scopes within
+            // this factory instance share the same isolated in-memory store.
             services.AddDbContext<PersonDbContext>(opt =>
-                opt.UseInMemoryDatabase(Guid.NewGuid().ToString()));
+                opt.UseInMemoryDatabase(_databaseName));
         });
     }
 }
