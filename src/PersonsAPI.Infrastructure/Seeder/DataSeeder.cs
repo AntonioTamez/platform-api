@@ -65,7 +65,7 @@ public static class DataSeeder
         using var scope = services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<PersonDbContext>();
 
-        if (context.Persons.Any()) return;
+        if (await context.Persons.AnyAsync()) return;
 
         context.Persons.AddRange(
             Person.Create("María", "García", "López", new DateOnly(1994, 6, 15)),
