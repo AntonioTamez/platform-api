@@ -2,18 +2,18 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Testing;
 using PersonsAPI.Application.DTOs;
 
 namespace PersonsAPI.Api.Tests.Integration;
 
 /// <summary>
-/// Integration tests covering all six PersonsController endpoints.
-/// Uses <see cref="WebApplicationFactory{T}"/> to boot the real ASP.NET Core host
-/// with the InMemory store seeded by <c>DataSeeder</c> (via Program.cs startup).
+/// Integration tests covering all PersonsController endpoints.
+/// Uses <see cref="ResetableApiFactory"/> to boot the real ASP.NET Core host
+/// with an isolated InMemory store seeded by <c>DataSeeder</c> (via Program.cs startup).
+/// Each fixture instance gets a uniquely-named database to prevent cross-test state contamination.
 /// </summary>
-public sealed class PersonsEndpointsTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PersonsEndpointsTests(ResetableApiFactory factory)
+    : IClassFixture<ResetableApiFactory>
 {
     private HttpClient CreateClient() => factory.CreateClient();
 
@@ -60,7 +60,8 @@ public sealed class PersonsEndpointsTests(WebApplicationFactory<Program> factory
         var response = await client.GetAsync("/api/persons/999999");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.NotNull(response.Content.Headers.ContentType);
+        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType.MediaType);
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
         Assert.NotNull(problem);
         Assert.Equal("Not Found", problem.Title);
@@ -84,6 +85,49 @@ public sealed class PersonsEndpointsTests(WebApplicationFactory<Program> factory
         Assert.Equal("TestFn", person.FirstName);
         Assert.Equal("TestPa", person.PaternalLastName);
         Assert.Equal("TestMa", person.MaternalLastName);
+    }
+
+    [Fact]
+    public async Task Put_ValidBody_Returns200WithUpdatedPerson()
+    {
+        var client = CreateClient();
+
+        // Create a person to update
+        var created = await client.PostAsJsonAsync("/api/persons",
+            new CreatePersonRequest("PutOriginal", "PutPa", "PutMa", new DateOnly(1990, 5, 20)));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var person = await created.Content.ReadFromJsonAsync<PersonResponse>();
+        Assert.NotNull(person);
+        var updateId = person.Id;
+
+        // PUT: replace all fields
+        var updateRequest = new UpdatePersonRequest("PutUpdated", "NewPa", "NewMa", new DateOnly(1991, 6, 21));
+        var response = await client.PutAsJsonAsync($"/api/persons/{updateId}", updateRequest);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<PersonResponse>();
+        Assert.NotNull(updated);
+        Assert.Equal(updateId, updated.Id);
+        Assert.Equal("PutUpdated", updated.FirstName);
+        Assert.Equal("NewPa", updated.PaternalLastName);
+        Assert.Equal("NewMa", updated.MaternalLastName);
+        Assert.Equal(new DateOnly(1991, 6, 21), updated.DateOfBirth);
+    }
+
+    [Fact]
+    public async Task Put_UnknownId_Returns404ProblemDetails()
+    {
+        var client = CreateClient();
+
+        var updateRequest = new UpdatePersonRequest("Ghost", "Ghost", "Ghost", new DateOnly(1990, 1, 1));
+        var response = await client.PutAsJsonAsync("/api/persons/999999", updateRequest);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotNull(response.Content.Headers.ContentType);
+        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Equal(404, problem.Status);
     }
 
     [Fact]

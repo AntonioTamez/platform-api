@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace PersonsAPI.Api.Tests.Integration;
 
@@ -12,10 +11,10 @@ namespace PersonsAPI.Api.Tests.Integration;
 ///
 /// <para>Covers requirements: ERR-01 (application/problem+json content type),
 /// ERR-02 (400 with errors dictionary), ERR-03 (404 for unknown person id),
-/// DOC-01 (OpenAPI document at /openapi/v1.json), DOC-02 (Scalar UI at /scalar or /scalar/v1).</para>
+/// DOC-01 (OpenAPI document at /openapi/v1.json), DOC-02 (Scalar UI at /scalar/v1).</para>
 /// </summary>
-public sealed class ProblemDetailsTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ProblemDetailsTests(ResetableApiFactory factory)
+    : IClassFixture<ResetableApiFactory>
 {
     [Fact]
     public async Task Get_UnknownPerson_Returns404WithRfc9457ProblemDetails()
@@ -25,7 +24,8 @@ public sealed class ProblemDetailsTests(WebApplicationFactory<Program> factory)
         var response = await client.GetAsync("/api/persons/999999");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.NotNull(response.Content.Headers.ContentType);
+        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType.MediaType);
 
         await using var stream = await response.Content.ReadAsStreamAsync();
         using var doc = await JsonDocument.ParseAsync(stream);
@@ -52,7 +52,8 @@ public sealed class ProblemDetailsTests(WebApplicationFactory<Program> factory)
         var response = await client.PostAsync("/api/persons", content);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.NotNull(response.Content.Headers.ContentType);
+        Assert.StartsWith("application/problem+json", response.Content.Headers.ContentType.MediaType);
 
         await using var stream = await response.Content.ReadAsStreamAsync();
         using var doc = await JsonDocument.ParseAsync(stream);
@@ -80,7 +81,8 @@ public sealed class ProblemDetailsTests(WebApplicationFactory<Program> factory)
         var response = await client.GetAsync("/openapi/v1.json");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.StartsWith("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.NotNull(response.Content.Headers.ContentType);
+        Assert.StartsWith("application/json", response.Content.Headers.ContentType.MediaType);
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("\"openapi\"", body);
@@ -93,17 +95,10 @@ public sealed class ProblemDetailsTests(WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient();
 
-        // Try /scalar/v1 first (Scalar default under MapScalarApiReference)
         var response = await client.GetAsync("/scalar/v1");
 
-        if (!response.IsSuccessStatusCode)
-        {
-            // Fallback to /scalar
-            response = await client.GetAsync("/scalar");
-        }
-
-        Assert.True(response.IsSuccessStatusCode,
-            $"Expected 200 from /scalar/v1 or /scalar, got {(int)response.StatusCode}");
-        Assert.StartsWith("text/html", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(response.Content.Headers.ContentType);
+        Assert.StartsWith("text/html", response.Content.Headers.ContentType.MediaType);
     }
 }
