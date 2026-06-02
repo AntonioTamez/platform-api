@@ -19,11 +19,15 @@ A correctly layered, richly modeled API that proves Clean and Hexagonal Architec
 
 ### Active
 
-- [ ] Full CRUD + PATCH operations for Person (GET all, GET by ID, POST, PUT, PATCH, DELETE)
-- [ ] Clean Architecture layer separation: Domain → Application → Infrastructure → Presentation
-- [ ] Hexagonal Architecture: ports (interfaces) in Domain/Application, adapters (implementations) in Infrastructure and Presentation
-- [ ] Controllers with proper HTTP semantics (not Minimal API)
-- [ ] All code in English
+(No active requirements — all milestone requirements validated)
+
+### Completed
+
+- [x] Full CRUD + PATCH operations for Person (GET all, GET by ID, POST, PUT, PATCH, DELETE) — Validated in Phase 04: api-layer
+- [x] Clean Architecture layer separation: Domain → Application → Infrastructure → Presentation — Validated in Phase 04: api-layer
+- [x] Hexagonal Architecture: ports (interfaces) in Domain/Application, adapters (implementations) in Infrastructure and Presentation — Validated in Phase 04: api-layer
+- [x] Controllers with proper HTTP semantics (not Minimal API) — Validated in Phase 04: api-layer
+- [x] All code in English — Validated throughout all phases
 
 ### Out of Scope
 
@@ -55,18 +59,24 @@ A correctly layered, richly modeled API that proves Clean and Hexagonal Architec
 | EF Core InMemory over fake List<T> | Applies real EF patterns (DbContext, IQueryable) while keeping zero setup | Confirmed in Phase 03: PersonDbContext + PersonRepository implement full EF patterns; builder.Ignore(p => p.Age) prevents computed property mapping |
 | Clean + Hexagonal combined | Hexagonal defines port/adapter boundaries; Clean defines layer ownership | Confirmed in Phase 03: IPersonRepository (port in Application) implemented by PersonRepository (adapter in Infrastructure); Application has zero EF references |
 | Rich domain model on Person | Age calculation belongs to the entity — encapsulates business logic | Confirmed in Phase 01: Person.Create() enforces all invariants; Age computed in getter |
-| Controllers over Minimal API | Explicit requirement; controllers map better to Clean's Presentation layer | — Pending |
+| Controllers over Minimal API | Explicit requirement; controllers map better to Clean's Presentation layer | Confirmed in Phase 04: PersonsController sealed [ApiController] with six actions; no Minimal API endpoints anywhere in solution |
 | DomainException inherits Exception directly | Application layer catches by type; not ArgumentException to avoid conflating domain violations with BCL errors | Confirmed in Phase 01: DomainException : Exception, guarded by inheritance test |
+
+## Current State
+
+Phase 4 complete — all four milestone phases delivered. The PersonsAPI is a fully operational .NET 10 Web API with:
+- Rich domain model (Person entity, DomainException, Age computation)
+- CQRS via Mediator.SourceGenerator with FluentValidation pipeline
+- EF Core InMemory persistence with IPersonRepository port/adapter
+- Six HTTP endpoints with RFC 9457 Problem Details error responses
+- OpenAPI 3.1 documentation + Scalar interactive UI
+- 62 automated tests (domain, application, infrastructure, integration) — all passing
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
+Last updated: Phase 4 complete (2026-06-01)
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd-complete-milestone`):
