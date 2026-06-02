@@ -8,6 +8,17 @@ A .NET 10 Web API built with controllers (not Minimal API) that demonstrates Cle
 
 A correctly layered, richly modeled API that proves Clean and Hexagonal Architecture work together — where the domain drives everything and infrastructure is a detail.
 
+## Current Milestone: v2.0 Cloud Deployment
+
+**Goal:** Containerize the PersonsAPI with Docker and deploy it to Google Cloud Run with a full CI/CD pipeline via GitHub Actions.
+
+**Target features:**
+- Multi-stage Dockerfile for the .NET 10 API
+- docker-compose for local development parity
+- GitHub Actions pipeline: build → test → push to Artifact Registry → deploy to Cloud Run
+- Health check endpoint at `/health` (Cloud Run liveness requirement)
+- Structured logging with Serilog in JSON format (Google Cloud Logging compatible)
+
 ## Current State
 
 **v1.0 shipped 2026-06-02** — all four architectural layers complete.
@@ -41,14 +52,21 @@ The PersonsAPI is a fully operational .NET 10 Web API:
 - ✓ OpenAPI documentation + Scalar interactive UI — v1.0
 - ✓ All code in English — v1.0
 
-### Active (v2.0 candidates)
+### Active (v2.0)
+
+- [ ] Multi-stage Dockerfile for the .NET 10 API (DOCK-01)
+- [ ] docker-compose for local/cloud parity (DOCK-02)
+- [ ] GitHub Actions CI/CD: build → test → push → deploy (CICD-01)
+- [ ] Google Cloud Run deployment configuration (CLOUD-01)
+- [ ] Health check endpoint at `/health` (OBS-02)
+- [ ] Structured logging with Serilog in JSON format (OBS-01)
+
+### Deferred (v2.1+ candidates)
 
 - [ ] Replace EF Core InMemory with SQLite/SQL Server and real migrations (PERS-01)
 - [ ] Integration tests using EF Core SQLite in-memory (PERS-02)
 - [ ] JWT authentication on write endpoints (SEC-01)
 - [ ] Role-based authorization (admin vs. read-only) (SEC-02)
-- [ ] Structured logging with Serilog (OBS-01)
-- [ ] Health check endpoint at /health (OBS-02)
 
 ### Out of Scope
 
@@ -96,4 +114,22 @@ The PersonsAPI is a fully operational .NET 10 Web API:
 | ResetableApiFactory for integration tests | Shared WebApplicationFactory + EF InMemory = ordering-dependent test failures; each fixture needs isolated DB | ✓ Guid.NewGuid() per factory instance eliminates cross-test state contamination |
 
 ---
-*Last updated: 2026-06-02 after v1.0 milestone completion*
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
+---
+*Last updated: 2026-06-01 after v2.0 milestone start*
