@@ -30,8 +30,8 @@ Requirements for cloud deployment milestone. Each maps to roadmap phases.
 
 ### Observability
 
-- [ ] **OBS-01**: Developer can see structured JSON logs from the running API in Google Cloud Logging
-- [ ] **OBS-02**: `/health` endpoint returns HTTP 200 OK and enables Cloud Run liveness probe
+- ✓ **OBS-01**: Developer can see structured JSON logs from the running API in Google Cloud Logging — Phase 5 (2026-06-03)
+- ✓ **OBS-02**: `/health` endpoint returns HTTP 200 OK and enables Cloud Run liveness probe — Phase 5 (2026-06-03)
 
 ### Docker
 

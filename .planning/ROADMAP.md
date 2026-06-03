@@ -21,7 +21,7 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 
 ### v2.0 Cloud Deployment
 
-- [ ] **Phase 5: Observability** - Add Serilog JSON logging and `/health` endpoint locally
+- [x] **Phase 5: Observability** - Add Serilog JSON logging and `/health` endpoint locally (completed 2026-06-03)
 - [ ] **Phase 6: Containerization** - Build multi-stage Dockerfile and docker-compose for local parity
 - [ ] **Phase 7: Cloud Run Deployment** - Deploy container to Google Cloud Run manually
 - [ ] **Phase 8: CI/CD Pipeline** - Automate build → test → push → deploy via GitHub Actions
@@ -42,7 +42,7 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 
 **Plans**: 1 planPlans:
 
-- [ ] 05-01-PLAN.md — Add Serilog CLEF JSON logging and /health endpoint to the Api layer (3 tasks)
+- [x] 05-01-PLAN.md — Add Serilog CLEF JSON logging and /health endpoint to the Api layer (3 tasks) — completed 2026-06-03
 
 **UI hint**: no
 
@@ -99,7 +99,7 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 | 2. Application Layer | v1.0 | 3/3 | Complete | 2026-05-29 |
 | 3. Infrastructure Layer | v1.0 | 3/3 | Complete | 2026-05-31 |
 | 4. API Layer | v1.0 | 3/3 | Complete | 2026-06-02 |
-| 5. Observability | v2.0 | 0/1 | Planned | - |
+| 5. Observability | v2.0 | 1/1 | Complete | 2026-06-03 |
 | 6. Containerization | v2.0 | 0/? | Not started | - |
 | 7. Cloud Run Deployment | v2.0 | 0/? | Not started | - |
 | 8. CI/CD Pipeline | v2.0 | 0/? | Not started | - |
