@@ -44,7 +44,7 @@ key-decisions:
 patterns-established:
   - "Serilog init: builder.Host.UseSerilog immediately after WebApplication.CreateBuilder, before any builder.Services.Add*"
   - "Health endpoint: app.MapHealthChecks with HealthCheckOptions.ResponseWriter for JSON; placed after MapScalarApiReference"
-  - "Test Serilog suppression: ConfigureLogging.ClearProviders + SetMinimumLevel.None inside ConfigureWebHost"
+  - "Test Serilog suppression: replace ILoggerFactory with NullLoggerFactory.Instance via ConfigureServices (ClearProviders is ineffective against Serilog's ILoggerFactory singleton)"
 
 requirements-completed: [OBS-01, OBS-02]
 
@@ -106,10 +106,10 @@ completed: 2026-06-03
 
 - **Found during:** Task 3 first attempt (build error)
 - **Issue:** PATTERNS.md Option A prescribed `builder.UseSerilog(...)` inside `ConfigureWebHost(IWebHostBuilder builder)`. `SerilogHostBuilderExtensions.UseSerilog` requires `IHostBuilder`, not `IWebHostBuilder`. CS1929 compile error.
-- **Fix:** Switched to Option B — `builder.ConfigureLogging(l => { l.ClearProviders(); l.SetMinimumLevel(LogLevel.None); })`. Equivalent suppression effect.
+- **Fix:** Used `ConfigureServices` to remove all `ILoggerFactory` descriptors and replace with `NullLoggerFactory.Instance`. `ConfigureLogging.ClearProviders` was tried first (commit `53d59b9`) but confirmed ineffective (CR-01 in code review) — Serilog registers a full `ILoggerFactory` singleton that bypasses `ILoggerProvider`. Final fix: `ff26c8c`.
 - **Files modified:** `tests/PersonsAPI.Api.Tests/ResetableApiFactory.cs`
-- **Verification:** `dotnet test` exits 0, 64 tests pass, no `{"@t":` lines in output
-- **Committed in:** `53d59b9`
+- **Verification:** `dotnet test` exits 0, 64 tests pass, 0 `{"@t":` CLEF JSON lines in test output
+- **Committed in:** `ff26c8c` (CR-01 fix)
 
 ---
 
