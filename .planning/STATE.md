@@ -4,10 +4,10 @@ milestone: v2.0
 milestone_name: Cloud Deployment
 status: planning
 stopped_at:
-last_updated: "2026-06-01T00:00:00.000Z"
-last_activity: 2026-06-01 — Milestone v2.0 started
+last_updated: "2026-06-02T00:00:00.000Z"
+last_activity: 2026-06-02 — Roadmap created for v2.0 (Phases 5-8)
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -25,10 +25,14 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 5 (Observability) — not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-01 — Milestone v2.0 started
+Status: Roadmap defined, ready for phase planning
+Last activity: 2026-06-02 — Roadmap created (Phases 5-8)
+
+```
+Progress: [----------] 0% (0/4 phases)
+```
 
 ## Performance Metrics
 
@@ -58,10 +62,14 @@ Recent decisions affecting current work:
 - v2.0: EF Core InMemory retained — real DB deferred to v2.1
 - v2.0: Serilog structured logging in JSON format (Google Cloud Logging compatible)
 - v2.0: Health check at /health required by Cloud Run liveness probe
+- v2.0: Phase ordering is inside-out: local (Observability) → local container → cloud manual → cloud automated
+- v2.0: Only 2 new NuGet packages needed (Serilog.AspNetCore, Serilog.Formatting.Compact)
+- v2.0: All changes land in Program.cs, appsettings.json, and new infra files — zero changes to Domain/Application/Infrastructure layers
 
 ### Pending Todos
 
-None yet.
+- Phase 7 planning: confirm GCP project ID and region (affects Artifact Registry URL format)
+- Phase 8 planning: decide GitHub auth approach — Workload Identity Federation vs. Service Account JSON key
 
 ### Blockers/Concerns
 
@@ -78,4 +86,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 5` to plan the first phase of v2.0
+- Run `/gsd-plan-phase 5` to plan Phase 5: Observability
