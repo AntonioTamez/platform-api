@@ -37,7 +37,9 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
   2. `GET /health` returns HTTP 200 OK with a plain-text or JSON body
   3. All 64 existing tests still pass after logging changes
   4. Log output is parseable JSON — Cloud Logging can ingest it without transformation
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 05-01-PLAN.md — Add Serilog CLEF JSON logging and /health endpoint to the Api layer (3 tasks)
 **UI hint**: no
 
 ### Phase 6: Containerization
@@ -84,7 +86,7 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 | 2. Application Layer | v1.0 | 3/3 | Complete | 2026-05-29 |
 | 3. Infrastructure Layer | v1.0 | 3/3 | Complete | 2026-05-31 |
 | 4. API Layer | v1.0 | 3/3 | Complete | 2026-06-02 |
-| 5. Observability | v2.0 | 0/? | Not started | - |
+| 5. Observability | v2.0 | 0/1 | Planned | - |
 | 6. Containerization | v2.0 | 0/? | Not started | - |
 | 7. Cloud Run Deployment | v2.0 | 0/? | Not started | - |
 | 8. CI/CD Pipeline | v2.0 | 0/? | Not started | - |
