@@ -1,4 +1,5 @@
 using Mediator;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
 using PersonsAPI.Api.ExceptionHandlers;
 using PersonsAPI.Application;
@@ -29,6 +30,7 @@ builder.Services.AddMediator(options =>
 });
 builder.Services.AddApplication();                                        // FluentValidation validators
 builder.Services.AddInfrastructure();                                     // DbContext + Repository
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -37,6 +39,14 @@ app.UseHttpsRedirection();
 app.MapControllers();
 app.MapOpenApi();               // /openapi/v1.json (DOC-01)
 app.MapScalarApiReference();    // /scalar — MapScalar not UseScalar (Pitfall 8)
+app.MapHealthChecks("/health", new HealthCheckOptions             // D-02: JSON body {"status":"Healthy"}
+{
+    ResponseWriter = (ctx, _) =>
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        return ctx.Response.WriteAsync("{\"status\":\"Healthy\"}");
+    }
+}); // D-03: anonymous — Cloud Run liveness probe calls /health without credentials
 
 await app.Services.SeedAsync(); // BEFORE RunAsync — seeds InMemory store (Pitfall 5)
 await app.RunAsync();
