@@ -3,9 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Cloud Deployment
 status: planning
-stopped_at:
 last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 — Roadmap created for v2.0 (Phases 5-8)
+last_activity: 2026-06-02 — Phase 5 context gathered (Observability)
 progress:
   total_phases: 4
   completed_phases: 0
