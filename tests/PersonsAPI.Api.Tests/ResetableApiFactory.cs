@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PersonsAPI.Infrastructure.Persistence;
 
 namespace PersonsAPI.Api.Tests;
@@ -22,6 +23,13 @@ public sealed class ResetableApiFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // D-11: suppress Serilog JSON output in test runs (UseSerilog unavailable on IWebHostBuilder in v9)
+        builder.ConfigureLogging(logging =>
+        {
+            logging.ClearProviders();
+            logging.SetMinimumLevel(LogLevel.None);
+        });
+
         builder.ConfigureServices(services =>
         {
             // Remove ALL PersonDbContext-related registrations added by AddInfrastructure().
