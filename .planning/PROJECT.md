@@ -21,10 +21,9 @@ A correctly layered, richly modeled API that proves Clean and Hexagonal Architec
 
 ## Current State
 
-**v1.0 shipped 2026-06-02** — all four architectural layers complete.
+**Phase 5 complete 2026-06-03** — v2.0 Cloud Deployment in progress (1/4 phases done).
 
-The PersonsAPI is a fully operational .NET 10 Web API:
-- **1,435 LOC** in `src/` (C#), **1,251 LOC** in `tests/`
+The PersonsAPI is a fully operational .NET 10 Web API with cloud-ready observability:
 - **64 automated tests** — 32 domain, 15 application, 5 infrastructure, 12 integration — all passing
 - Rich Person domain model with private setters, computed Age, factory, and update methods
 - CQRS via Mediator.SourceGenerator 3.0.2 with FluentValidation pipeline behavior
@@ -32,7 +31,9 @@ The PersonsAPI is a fully operational .NET 10 Web API:
 - DataSeeder seeds 3 persons (María García López, Carlos Ramírez Martínez, Ana Flores Mendoza) on startup
 - Six HTTP endpoints with RFC 9457 Problem Details (application/problem+json) error responses
 - OpenAPI 3.1 document at `/openapi/v1.json` + Scalar interactive UI at `/scalar/v1`
-- `dotnet run --project src/PersonsAPI.Api` → boots, seeds, serves all endpoints
+- **Serilog CLEF JSON stdout logging** — Cloud Logging-compatible, EF Core/AspNetCore namespaces filtered to Warning
+- **`GET /health`** — HTTP 200 + `{"status":"Healthy"}` (application/json) — Cloud Run liveness probe ready
+- `dotnet run --project src/PersonsAPI.Api` → boots, seeds, serves all endpoints, emits JSON logs
 
 ## Requirements
 
@@ -52,14 +53,17 @@ The PersonsAPI is a fully operational .NET 10 Web API:
 - ✓ OpenAPI documentation + Scalar interactive UI — v1.0
 - ✓ All code in English — v1.0
 
-### Active (v2.0)
+### Validated (v2.0 — in progress)
+
+- ✓ Health check endpoint at `/health` with JSON response (OBS-02) — Phase 5, 2026-06-03
+- ✓ Structured logging with Serilog CLEF JSON format (OBS-01) — Phase 5, 2026-06-03
+
+### Active (v2.0 — remaining)
 
 - [ ] Multi-stage Dockerfile for the .NET 10 API (DOCK-01)
 - [ ] docker-compose for local/cloud parity (DOCK-02)
 - [ ] GitHub Actions CI/CD: build → test → push → deploy (CICD-01)
 - [ ] Google Cloud Run deployment configuration (CLOUD-01)
-- [ ] Health check endpoint at `/health` (OBS-02)
-- [ ] Structured logging with Serilog in JSON format (OBS-01)
 
 ### Deferred (v2.1+ candidates)
 
