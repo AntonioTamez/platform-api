@@ -81,7 +81,16 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
   3. Cloud Run startup probe passes (no container crash loop)
   4. Google Cloud Logging shows JSON log entries from the running service
 
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — Add key.json to .gitignore; author DEPLOYMENT.md Cloud Run runbook at solution root (CLOUD-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-02-PLAN.md — Execute runbook against GCP account; verify all 4 success criteria against the live public URL (CLOUD-01)
+
 **UI hint**: no
 
 ### Phase 8: CI/CD Pipeline
@@ -109,5 +118,5 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 | 4. API Layer | v1.0 | 3/3 | Complete | 2026-06-02 |
 | 5. Observability | v2.0 | 1/1 | Complete | 2026-06-03 |
 | 6. Containerization | v2.0 | 2/2 | Complete    | 2026-06-04 |
-| 7. Cloud Run Deployment | v2.0 | 0/? | Not started | - |
+| 7. Cloud Run Deployment | v2.0 | 0/2 | Not started | - |
 | 8. CI/CD Pipeline | v2.0 | 0/? | Not started | - |
