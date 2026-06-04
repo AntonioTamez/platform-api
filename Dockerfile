@@ -4,12 +4,13 @@ WORKDIR /source
 
 # Layer caching: restore csproj files first (D-07)
 # Any change to .cs files will NOT bust this restore layer
-COPY PersonsAPI.sln .
 COPY src/PersonsAPI.Domain/PersonsAPI.Domain.csproj             ./src/PersonsAPI.Domain/
 COPY src/PersonsAPI.Application/PersonsAPI.Application.csproj   ./src/PersonsAPI.Application/
 COPY src/PersonsAPI.Infrastructure/PersonsAPI.Infrastructure.csproj ./src/PersonsAPI.Infrastructure/
 COPY src/PersonsAPI.Api/PersonsAPI.Api.csproj                   ./src/PersonsAPI.Api/
-RUN dotnet restore
+# Restore against the API project (not the .sln) so test project references in the solution
+# are never evaluated — test .csproj files are excluded from the build context by .dockerignore
+RUN dotnet restore src/PersonsAPI.Api/PersonsAPI.Api.csproj
 
 # Copy src/ only — tests/ excluded per D-05
 COPY src/ ./src/
