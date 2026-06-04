@@ -58,9 +58,13 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
   3. `curl localhost:8080/api/persons` returns the 3 seeded persons
   4. Container logs show JSON-formatted Serilog output
 
-**Plans**: 2 plans
-Plans:
+**Plans**: 2 plansPlans:
+**Wave 1**
+
 - [ ] 06-01-PLAN.md — Remove HTTPS redirect; create Dockerfile + .dockerignore; `docker build` succeeds (DOCK-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — Create docker-compose.yml; verify `docker compose up` serves all endpoints with JSON logs (DOCK-02)
 
 **UI hint**: no
