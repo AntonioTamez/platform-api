@@ -58,7 +58,11 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
   3. `curl localhost:8080/api/persons` returns the 3 seeded persons
   4. Container logs show JSON-formatted Serilog output
 
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 06-01-PLAN.md — Remove HTTPS redirect; create Dockerfile + .dockerignore; `docker build` succeeds (DOCK-01)
+- [ ] 06-02-PLAN.md — Create docker-compose.yml; verify `docker compose up` serves all endpoints with JSON logs (DOCK-02)
+
 **UI hint**: no
 
 ### Phase 7: Cloud Run Deployment
@@ -100,6 +104,6 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 | 3. Infrastructure Layer | v1.0 | 3/3 | Complete | 2026-05-31 |
 | 4. API Layer | v1.0 | 3/3 | Complete | 2026-06-02 |
 | 5. Observability | v2.0 | 1/1 | Complete | 2026-06-03 |
-| 6. Containerization | v2.0 | 0/? | Not started | - |
+| 6. Containerization | v2.0 | 0/2 | Not started | - |
 | 7. Cloud Run Deployment | v2.0 | 0/? | Not started | - |
 | 8. CI/CD Pipeline | v2.0 | 0/? | Not started | - |
