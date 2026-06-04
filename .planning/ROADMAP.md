@@ -108,6 +108,6 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 | 3. Infrastructure Layer | v1.0 | 3/3 | Complete | 2026-05-31 |
 | 4. API Layer | v1.0 | 3/3 | Complete | 2026-06-02 |
 | 5. Observability | v2.0 | 1/1 | Complete | 2026-06-03 |
-| 6. Containerization | v2.0 | 2/2 | Complete   | 2026-06-04 |
+| 6. Containerization | v2.0 | 2/2 | Complete    | 2026-06-04 |
 | 7. Cloud Run Deployment | v2.0 | 0/? | Not started | - |
 | 8. CI/CD Pipeline | v2.0 | 0/? | Not started | - |

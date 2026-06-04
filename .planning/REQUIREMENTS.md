@@ -8,6 +8,7 @@
 All v1.0 requirements were validated and shipped. See `.planning/milestones/v1.0-milestone/` for archive.
 
 ### Architecture
+
 - ✓ **ARCH-01**: Rich Person domain model with calculated Age from DateOfBirth — v1.0
 - ✓ **ARCH-02**: Clean Architecture layer separation: Domain → Application → Infrastructure → Api — v1.0
 - ✓ **ARCH-03**: Hexagonal Architecture: ports in Domain/Application, adapters in Infrastructure and Api — v1.0
@@ -15,11 +16,13 @@ All v1.0 requirements were validated and shipped. See `.planning/milestones/v1.0
 - ✓ **ARCH-05**: CQRS via Mediator.SourceGenerator 3.0.2 with FluentValidation pipeline behavior — v1.0
 
 ### Persistence
+
 - ✓ **PERS-01**: EF Core InMemory persistence adapter (PersonDbContext + PersonRepository) — v1.0
 - ✓ **PERS-02**: Seeded in-memory data for immediate testing (3 persons via DataSeeder) — v1.0
 - ✓ **PERS-03**: IPersonRepository port in Application layer — v1.0
 
 ### API
+
 - ✓ **API-01**: Full CRUD + PATCH operations (GET all, GET by id, POST, PUT, PATCH, DELETE) — v1.0
 - ✓ **API-02**: RFC 9457 Problem Details for all error responses — v1.0
 - ✓ **API-03**: OpenAPI documentation + Scalar interactive UI — v1.0
@@ -35,8 +38,8 @@ Requirements for cloud deployment milestone. Each maps to roadmap phases.
 
 ### Docker
 
-- [ ] **DOCK-01**: Developer can build the API into a Docker image from the solution root using `docker build`
-- [ ] **DOCK-02**: Developer can run the full API locally with `docker compose up` and reach all endpoints at port 8080
+- [x] **DOCK-01**: Developer can build the API into a Docker image from the solution root using `docker build`
+- [x] **DOCK-02**: Developer can run the full API locally with `docker compose up` and reach all endpoints at port 8080
 
 ### Cloud Run
 
@@ -86,12 +89,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | OBS-01 | Phase 5 | Pending |
 | OBS-02 | Phase 5 | Pending |
-| DOCK-01 | Phase 6 | Pending |
-| DOCK-02 | Phase 6 | Pending |
+| DOCK-01 | Phase 6 | Complete |
+| DOCK-02 | Phase 6 | Complete |
 | CLOUD-01 | Phase 7 | Pending |
 | CICD-01 | Phase 8 | Pending |
 
 **Coverage:**
+
 - v2 requirements: 6 total
 - Mapped to phases: 6
 - Unmapped: 0 ✓
