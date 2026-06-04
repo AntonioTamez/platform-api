@@ -35,7 +35,6 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 app.UseExceptionHandler();      // NO route argument — activates IExceptionHandler chain (Pitfall 2)
-app.UseHttpsRedirection();
 app.MapControllers();
 app.MapOpenApi();               // /openapi/v1.json (DOC-01)
 app.MapScalarApiReference();    // /scalar — MapScalar not UseScalar (Pitfall 8)
