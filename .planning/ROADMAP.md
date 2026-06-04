@@ -22,7 +22,7 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 ### v2.0 Cloud Deployment
 
 - [x] **Phase 5: Observability** - Add Serilog JSON logging and `/health` endpoint locally (completed 2026-06-03)
-- [ ] **Phase 6: Containerization** - Build multi-stage Dockerfile and docker-compose for local parity
+- [x] **Phase 6: Containerization** - Build multi-stage Dockerfile and docker-compose for local parity (completed 2026-06-04)
 - [ ] **Phase 7: Cloud Run Deployment** - Deploy container to Google Cloud Run manually
 - [ ] **Phase 8: CI/CD Pipeline** - Automate build → test → push → deploy via GitHub Actions
 
@@ -61,11 +61,11 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 **Plans**: 2 plansPlans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Remove HTTPS redirect; create Dockerfile + .dockerignore; `docker build` succeeds (DOCK-01)
+- [x] 06-01-PLAN.md — Remove HTTPS redirect; create Dockerfile + .dockerignore; `docker build` succeeds (DOCK-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md — Create docker-compose.yml; verify `docker compose up` serves all endpoints with JSON logs (DOCK-02)
+- [x] 06-02-PLAN.md — Create docker-compose.yml; verify `docker compose up` serves all endpoints with JSON logs (DOCK-02)
 
 **UI hint**: no
 
@@ -108,6 +108,6 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 | 3. Infrastructure Layer | v1.0 | 3/3 | Complete | 2026-05-31 |
 | 4. API Layer | v1.0 | 3/3 | Complete | 2026-06-02 |
 | 5. Observability | v2.0 | 1/1 | Complete | 2026-06-03 |
-| 6. Containerization | v2.0 | 0/2 | Not started | - |
+| 6. Containerization | v2.0 | 2/2 | Complete   | 2026-06-04 |
 | 7. Cloud Run Deployment | v2.0 | 0/? | Not started | - |
 | 8. CI/CD Pipeline | v2.0 | 0/? | Not started | - |
