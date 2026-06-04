@@ -21,9 +21,9 @@ A correctly layered, richly modeled API that proves Clean and Hexagonal Architec
 
 ## Current State
 
-**Phase 5 complete 2026-06-03** — v2.0 Cloud Deployment in progress (1/4 phases done).
+**Phase 6 complete 2026-06-04** — v2.0 Cloud Deployment in progress (2/4 phases done).
 
-The PersonsAPI is a fully operational .NET 10 Web API with cloud-ready observability:
+The PersonsAPI is a fully operational .NET 10 Web API, cloud-ready and containerized:
 - **64 automated tests** — 32 domain, 15 application, 5 infrastructure, 12 integration — all passing
 - Rich Person domain model with private setters, computed Age, factory, and update methods
 - CQRS via Mediator.SourceGenerator 3.0.2 with FluentValidation pipeline behavior
@@ -57,11 +57,10 @@ The PersonsAPI is a fully operational .NET 10 Web API with cloud-ready observabi
 
 - ✓ Health check endpoint at `/health` with JSON response (OBS-02) — Phase 5, 2026-06-03
 - ✓ Structured logging with Serilog CLEF JSON format (OBS-01) — Phase 5, 2026-06-03
+- ✓ Multi-stage Dockerfile — non-root aspnet:10.0 image, HTTP port 8080 (DOCK-01) — Phase 6, 2026-06-04
+- ✓ docker-compose for local parity — `docker compose up` serves /health + /api/persons (DOCK-02) — Phase 6, 2026-06-04
 
 ### Active (v2.0 — remaining)
-
-- [ ] Multi-stage Dockerfile for the .NET 10 API (DOCK-01)
-- [ ] docker-compose for local/cloud parity (DOCK-02)
 - [ ] GitHub Actions CI/CD: build → test → push → deploy (CICD-01)
 - [ ] Google Cloud Run deployment configuration (CLOUD-01)
 
