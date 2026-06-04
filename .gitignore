@@ -14,3 +14,6 @@ obj/
 ## OS files
 .DS_Store
 Thumbs.db
+
+## GCP credentials (never commit service account keys)
+key.json
