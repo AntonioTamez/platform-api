@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Cloud Deployment
 status: executing
-last_updated: "2026-06-04T03:03:30.099Z"
-last_activity: 2026-06-04
+last_updated: "2026-06-03T00:00:00.000Z"
+last_activity: 2026-06-03
 progress:
   total_phases: 4
   completed_phases: 2
