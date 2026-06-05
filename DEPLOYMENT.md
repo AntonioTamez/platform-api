@@ -234,6 +234,8 @@ gcloud run deploy persons-api \
 
 > **Warning:** Use `--port 8080` exactly as shown. **Do not use `--port 80`.** The container listens on port 8080 (`ASPNETCORE_HTTP_PORTS=8080` in the Dockerfile). Using `--port 80` causes Cloud Run to inject `PORT=80` while the container still listens on 8080, resulting in a port mismatch, failed health checks, and a container crash loop.
 
+> **Note (CI/CD):** The GitHub Actions workflow in `.github/workflows/cicd.yml` intentionally omits `--port`, `--memory`, `--cpu`, `--min-instances`, `--allow-unauthenticated`, and `--set-env-vars` from `gcloud run deploy`. These flags are **initial-deploy-only** — once Cloud Run stores the service configuration, incremental deploys need only `--image`, `--region`, and `--platform` to update the running revision. Omitting them in CI preserves the configuration set in this step rather than resetting it on every push.
+
 After a successful deploy, `gcloud run deploy` prints the service URL:
 
 ```
@@ -354,10 +356,12 @@ The `.github/workflows/cicd.yml` workflow requires two GitHub repository secrets
 Minify before pasting:
 
 ```bash
-cat key.json | tr -d '\n'
+cat key.json | tr -d '\r\n'
 ```
 
 Copy the single-line output. Use that as the secret value.
+
+> **Note (Windows):** `tr -d '\r\n'` strips both carriage returns and newlines, which is required when minifying on Windows (where line endings are `\r\n`). Alternatively: `jq -c . key.json`.
 
 ### Option A: GitHub UI (Recommended for First-Time Setup)
 

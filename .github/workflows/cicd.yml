@@ -2,7 +2,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -71,10 +71,13 @@ jobs:
             --image ${{ env.IMAGE_URL }} \
             --region us-central1 \
             --platform managed \
+            --allow-unauthenticated \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
             --quiet
 
       - name: Print service URL
         run: |
           gcloud run services describe persons-api \
             --region us-central1 \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
             --format='value(status.url)'
