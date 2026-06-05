@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-01)
 
 **Core value:** A correctly layered, richly modeled API that proves Clean and Hexagonal Architecture work together — where the domain drives everything and infrastructure is a detail.
-**Current focus:** Phase 07 — Cloud Run deployment (Wave 2 checkpoint)
+**Current focus:** Phase 08 — CI/CD Pipeline (next)
 
 ## Current Position
 
 Phase: 7
-Plan: 07-02 (Wave 2 — human action checkpoint)
-Status: Awaiting human action — execute DEPLOYMENT.md runbook against GCP account
-Last activity: 2026-06-04 -- Phase 07 Wave 1 complete (07-01 DEPLOYMENT.md runbook authored)
+Plan: Complete
+Status: Phase 07 complete — PersonsAPI live on Google Cloud Run (CLOUD-01 satisfied)
+Last activity: 2026-06-04 -- Phase 07 complete; all 4 success criteria verified against live URL
 
 ```
 Progress: [██--------] 25% (1/4 phases)
