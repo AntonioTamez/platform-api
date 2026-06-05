@@ -18,6 +18,7 @@ This runbook takes a fresh GCP account from zero to a publicly reachable Cloud R
 - [Step 6: Build, Tag, and Push Docker Image](#step-6-build-tag-and-push-docker-image)
 - [Step 7: Deploy to Cloud Run](#step-7-deploy-to-cloud-run)
 - [Step 8: Verify Deployment](#step-8-verify-deployment)
+- [Step 9: GitHub Actions CI/CD Secrets Setup](#step-9-github-actions-cicd-secrets-setup)
 - [Appendix: Cleanup / Teardown](#appendix-cleanup--teardown)
 
 ---
@@ -332,6 +333,88 @@ resource.type="cloud_run_revision" AND resource.labels.service_name="persons-api
 Expected: JSON-structured log entries appear. Each entry is a Serilog CLEF JSON object.
 
 > **Note:** Log entries appear with `DEFAULT` severity (no colored severity badges). This is expected — Serilog CLEF emits a `@l` field but Cloud Logging expects a `severity` field for automatic mapping. Severity icons are a deferred enhancement (OBS-03, v3). The log entries themselves are valid JSON and fully readable.
+
+---
+
+## Step 9: GitHub Actions CI/CD Secrets Setup
+
+The `.github/workflows/cicd.yml` workflow requires two GitHub repository secrets before it can run. Create them once — the pipeline uses them automatically on every push to `main` and on every `workflow_dispatch` manual trigger.
+
+### Required Secrets
+
+| Secret Name | Value | Where to Find It |
+|-------------|-------|-----------------|
+| `GCP_SA_KEY` | Full contents of `key.json` (minified — see below) | The Service Account JSON key downloaded in Step 5 |
+| `GCP_PROJECT_ID` | GCP project ID string (e.g. `personsapi-XXXXXX`) | The value you substituted for `PROJECT_ID` throughout this runbook |
+
+### Why `GCP_SA_KEY` Must Be Minified
+
+> **Warning:** Copy the raw `key.json` file contents **as a single line** — whitespace and newlines in the stored secret corrupt the JSON and cause `google-github-actions/auth@v2` to fail immediately with a JSON parse error (not an authentication error). This is a common setup mistake.
+
+Minify before pasting:
+
+```bash
+cat key.json | tr -d '\n'
+```
+
+Copy the single-line output. Use that as the secret value.
+
+### Option A: GitHub UI (Recommended for First-Time Setup)
+
+1. Open your GitHub repository in a browser.
+2. Navigate to **Settings** → **Secrets and variables** → **Actions**.
+3. Click **New repository secret**.
+4. Create the first secret:
+   - **Name:** `GCP_SA_KEY`
+   - **Secret:** paste the minified single-line JSON from `key.json`
+5. Click **Add secret**.
+6. Click **New repository secret** again.
+7. Create the second secret:
+   - **Name:** `GCP_PROJECT_ID`
+   - **Secret:** your GCP project ID string (e.g. `personsapi-XXXXXX`)
+8. Click **Add secret**.
+
+### Option B: GitHub CLI (Alternative)
+
+Requires the `gh` CLI authenticated to the repository (`gh auth login`):
+
+```bash
+# GCP_SA_KEY — gh secret set reading from file handles single-line storage automatically
+gh secret set GCP_SA_KEY < key.json
+
+# GCP_PROJECT_ID — supply the project ID directly
+gh secret set GCP_PROJECT_ID --body "your-project-id"
+```
+
+> **Note:** `gh secret set GCP_SA_KEY < key.json` reads the file and stores it correctly without manual minification.
+
+### Verifying the Pipeline Without a Real Push
+
+Once both secrets exist, trigger the workflow manually to verify the full pipeline end-to-end without pushing to `main`:
+
+1. Open your GitHub repository → **Actions** tab.
+2. Select **CI/CD Pipeline** from the left sidebar.
+3. Click **Run workflow** → **Run workflow** (uses the `workflow_dispatch` trigger).
+4. Watch the three jobs run in sequence: `build-and-test` → `push-image` → `deploy`.
+5. Open the `deploy` job log. The final **Print service URL** step prints the live Cloud Run HTTPS URL.
+
+A passing run confirms all four v2.0 ROADMAP success criteria:
+
+| Criterion | Verified By |
+|-----------|-------------|
+| 64 tests pass in CI | `build-and-test` job green |
+| Three sequential jobs with test gate | `push-image` and `deploy` blocked until `build-and-test` passes |
+| Updated image deployed to Cloud Run | `deploy` job green, URL printed |
+| Pipeline triggered by push to main | Confirmed by `on: push: branches: [main]` in workflow |
+
+### Security Notes
+
+> **Note:** GitHub stores repository secrets encrypted (AES-256 at rest) and automatically masks any declared secret value in workflow run logs. A secret that appears in a log line is replaced with `***`.
+>
+> To maintain this protection:
+> - Never construct a non-secret environment variable or output that embeds a secret value.
+> - Never use `echo ${{ secrets.GCP_SA_KEY }}` or any similar `echo` command in a workflow step.
+> - The `cicd.yml` workflow passes `GCP_SA_KEY` only via `credentials_json:` in the `google-github-actions/auth@v2` step — never in a `run:` command.
 
 ---
 
