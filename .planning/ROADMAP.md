@@ -24,7 +24,7 @@ Full phase details archived in `.planning/milestones/v1.0-ROADMAP.md`
 - [x] **Phase 5: Observability** - Add Serilog JSON logging and `/health` endpoint locally (completed 2026-06-03)
 - [x] **Phase 6: Containerization** - Build multi-stage Dockerfile and docker-compose for local parity (completed 2026-06-04)
 - [x] **Phase 7: Cloud Run Deployment** - Deploy container to Google Cloud Run manually (completed 2026-06-04)
-- [ ] **Phase 8: CI/CD Pipeline** - Automate build → test → push → deploy via GitHub Actions
+- [x] **Phase 8: CI/CD Pipeline** - Automate build → test → push → deploy via GitHub Actions (completed 2026-06-05)
 
 ## Phase Details
 
@@ -109,7 +109,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — Author .github/workflows/cicd.yml (build-and-test → push-image → deploy) and document GitHub secrets setup in DEPLOYMENT.md (CICD-01)
+- [x] 08-01-PLAN.md — Author .github/workflows/cicd.yml (build-and-test → push-image → deploy) and document GitHub secrets setup in DEPLOYMENT.md (CICD-01)
 
 **UI hint**: no
 
@@ -124,4 +124,4 @@ Plans:
 | 5. Observability | v2.0 | 1/1 | Complete | 2026-06-03 |
 | 6. Containerization | v2.0 | 2/2 | Complete    | 2026-06-04 |
 | 7. Cloud Run Deployment | v2.0 | 2/2 | Complete | 2026-06-04 |
-| 8. CI/CD Pipeline | v2.0 | 0/1 | Not started | - |
+| 8. CI/CD Pipeline | v2.0 | 1/1 | Complete   | 2026-06-05 |

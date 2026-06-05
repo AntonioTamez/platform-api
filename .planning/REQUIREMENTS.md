@@ -47,7 +47,7 @@ Requirements for cloud deployment milestone. Each maps to roadmap phases.
 
 ### CI/CD
 
-- [ ] **CICD-01**: Every push to `main` automatically triggers build → tests → push to Artifact Registry → deploy to Cloud Run via GitHub Actions
+- [x] **CICD-01**: Every push to `main` automatically triggers build → tests → push to Artifact Registry → deploy to Cloud Run via GitHub Actions
 
 ## v3 Requirements (Deferred)
 
@@ -92,7 +92,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCK-01 | Phase 6 | Complete |
 | DOCK-02 | Phase 6 | Complete |
 | CLOUD-01 | Phase 7 | Pending |
-| CICD-01 | Phase 8 | Pending |
+| CICD-01 | Phase 8 | Complete |
 
 **Coverage:**
 
