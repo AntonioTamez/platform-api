@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-01)
 
 **Core value:** A correctly layered, richly modeled API that proves Clean and Hexagonal Architecture work together — where the domain drives everything and infrastructure is a detail.
-**Current focus:** Phase 06 — containerization
+**Current focus:** Phase 07 — Cloud Run deployment (Wave 2 checkpoint)
 
 ## Current Position
 
 Phase: 7
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-04 -- Phase 07 planning complete
+Plan: 07-02 (Wave 2 — human action checkpoint)
+Status: Awaiting human action — execute DEPLOYMENT.md runbook against GCP account
+Last activity: 2026-06-04 -- Phase 07 Wave 1 complete (07-01 DEPLOYMENT.md runbook authored)
 
 ```
 Progress: [██--------] 25% (1/4 phases)
