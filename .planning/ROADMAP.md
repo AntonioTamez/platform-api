@@ -105,7 +105,12 @@ Plans:
   3. A failed test in the build job blocks the push and deploy jobs
   4. After a successful run, the Cloud Run service serves the updated image within minutes
 
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — Author .github/workflows/cicd.yml (build-and-test → push-image → deploy) and document GitHub secrets setup in DEPLOYMENT.md (CICD-01)
+
 **UI hint**: no
 
 ## Progress
@@ -119,4 +124,4 @@ Plans:
 | 5. Observability | v2.0 | 1/1 | Complete | 2026-06-03 |
 | 6. Containerization | v2.0 | 2/2 | Complete    | 2026-06-04 |
 | 7. Cloud Run Deployment | v2.0 | 2/2 | Complete | 2026-06-04 |
-| 8. CI/CD Pipeline | v2.0 | 0/? | Not started | - |
+| 8. CI/CD Pipeline | v2.0 | 0/1 | Not started | - |
