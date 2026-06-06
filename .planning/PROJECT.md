@@ -21,9 +21,9 @@ A correctly layered, richly modeled API that proves Clean and Hexagonal Architec
 
 ## Current State
 
-**Phase 6 complete 2026-06-04** — v2.0 Cloud Deployment in progress (2/4 phases done).
+**Phase 8 complete 2026-06-06** — v2.0 Cloud Deployment complete (4/4 phases done).
 
-The PersonsAPI is a fully operational .NET 10 Web API, cloud-ready and containerized:
+The PersonsAPI is a fully operational .NET 10 Web API, deployed to Google Cloud Run with a full CI/CD pipeline:
 - **64 automated tests** — 32 domain, 15 application, 5 infrastructure, 12 integration — all passing
 - Rich Person domain model with private setters, computed Age, factory, and update methods
 - CQRS via Mediator.SourceGenerator 3.0.2 with FluentValidation pipeline behavior
@@ -33,7 +33,9 @@ The PersonsAPI is a fully operational .NET 10 Web API, cloud-ready and container
 - OpenAPI 3.1 document at `/openapi/v1.json` + Scalar interactive UI at `/scalar/v1`
 - **Serilog CLEF JSON stdout logging** — Cloud Logging-compatible, EF Core/AspNetCore namespaces filtered to Warning
 - **`GET /health`** — HTTP 200 + `{"status":"Healthy"}` (application/json) — Cloud Run liveness probe ready
-- `dotnet run --project src/PersonsAPI.Api` → boots, seeds, serves all endpoints, emits JSON logs
+- **Docker image** pushed to Artifact Registry (`us-central1-docker.pkg.dev/.../personsapi:latest`)
+- **Cloud Run service** `persons-api` — public HTTPS URL, scale-to-zero, 512MiB, port 8080
+- **GitHub Actions pipeline** (`.github/workflows/cicd.yml`) — push to `master` triggers build → test → push → deploy
 
 ## Requirements
 
@@ -60,9 +62,10 @@ The PersonsAPI is a fully operational .NET 10 Web API, cloud-ready and container
 - ✓ Multi-stage Dockerfile — non-root aspnet:10.0 image, HTTP port 8080 (DOCK-01) — Phase 6, 2026-06-04
 - ✓ docker-compose for local parity — `docker compose up` serves /health + /api/persons (DOCK-02) — Phase 6, 2026-06-04
 
-### Active (v2.0 — remaining)
-- [ ] GitHub Actions CI/CD: build → test → push → deploy (CICD-01)
-- [ ] Google Cloud Run deployment configuration (CLOUD-01)
+### Validated (v2.0 — complete)
+
+- ✓ Google Cloud Run deployment — `persons-api` service, us-central1, public HTTPS URL (CLOUD-01) — Phase 7, 2026-06-04
+- ✓ GitHub Actions CI/CD: build → test → push → deploy (CICD-01) — Phase 8, 2026-06-06
 
 ### Deferred (v2.1+ candidates)
 
