@@ -18,7 +18,7 @@ jobs:
           dotnet-version: '10.x'
 
       - name: Restore
-        run: dotnet restore src/PersonsAPI.sln
+        run: dotnet restore PersonsAPI.sln
 
       - name: Build
         run: dotnet build src/PersonsAPI.sln --configuration Release --no-restore
