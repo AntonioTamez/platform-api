@@ -2,28 +2,16 @@
 
 ## What This Is
 
-A .NET 10 Web API built with controllers (not Minimal API) that demonstrates Clean Architecture and Hexagonal Architecture applied together. The API manages personal data (first name, paternal last name, maternal last name, date of birth with calculated age) using EF Core InMemory provider for simulation. Designed as a learning exercise to internalize how these two architectural patterns coexist in a .NET project.
+A .NET 10 Web API built with controllers (not Minimal API) that demonstrates Clean Architecture and Hexagonal Architecture applied together. The API manages personal data (first name, paternal last name, maternal last name, date of birth with calculated age) using EF Core InMemory provider. Deployed to Google Cloud Run with a full GitHub Actions CI/CD pipeline. Designed as a learning exercise to internalize how these architectural patterns coexist and how to containerize and deploy a .NET API to the cloud.
 
 ## Core Value
 
 A correctly layered, richly modeled API that proves Clean and Hexagonal Architecture work together — where the domain drives everything and infrastructure is a detail.
 
-## Current Milestone: v2.0 Cloud Deployment
-
-**Goal:** Containerize the PersonsAPI with Docker and deploy it to Google Cloud Run with a full CI/CD pipeline via GitHub Actions.
-
-**Target features:**
-- Multi-stage Dockerfile for the .NET 10 API
-- docker-compose for local development parity
-- GitHub Actions pipeline: build → test → push to Artifact Registry → deploy to Cloud Run
-- Health check endpoint at `/health` (Cloud Run liveness requirement)
-- Structured logging with Serilog in JSON format (Google Cloud Logging compatible)
-
 ## Current State
 
-**Phase 8 complete 2026-06-06** — v2.0 Cloud Deployment complete (4/4 phases done).
+**v2.0 shipped 2026-06-06** — PersonsAPI deployed to Google Cloud Run with full CI/CD pipeline.
 
-The PersonsAPI is a fully operational .NET 10 Web API, deployed to Google Cloud Run with a full CI/CD pipeline:
 - **64 automated tests** — 32 domain, 15 application, 5 infrastructure, 12 integration — all passing
 - Rich Person domain model with private setters, computed Age, factory, and update methods
 - CQRS via Mediator.SourceGenerator 3.0.2 with FluentValidation pipeline behavior
@@ -55,17 +43,14 @@ The PersonsAPI is a fully operational .NET 10 Web API, deployed to Google Cloud 
 - ✓ OpenAPI documentation + Scalar interactive UI — v1.0
 - ✓ All code in English — v1.0
 
-### Validated (v2.0 — in progress)
+### Validated (v2.0)
 
 - ✓ Health check endpoint at `/health` with JSON response (OBS-02) — Phase 5, 2026-06-03
 - ✓ Structured logging with Serilog CLEF JSON format (OBS-01) — Phase 5, 2026-06-03
 - ✓ Multi-stage Dockerfile — non-root aspnet:10.0 image, HTTP port 8080 (DOCK-01) — Phase 6, 2026-06-04
 - ✓ docker-compose for local parity — `docker compose up` serves /health + /api/persons (DOCK-02) — Phase 6, 2026-06-04
-
-### Validated (v2.0 — complete)
-
 - ✓ Google Cloud Run deployment — `persons-api` service, us-central1, public HTTPS URL (CLOUD-01) — Phase 7, 2026-06-04
-- ✓ GitHub Actions CI/CD: build → test → push → deploy (CICD-01) — Phase 8, 2026-06-06
+- ✓ GitHub Actions CI/CD: build → test → push → deploy on every push to `master` (CICD-01) — Phase 8, 2026-06-05
 
 ### Deferred (v2.1+ candidates)
 
@@ -97,6 +82,10 @@ The PersonsAPI is a fully operational .NET 10 Web API, deployed to Google Cloud 
 - Validation: FluentValidation 12.1.1 via ValidationBehavior open generic in Mediator pipeline
 - API docs: Microsoft.AspNetCore.OpenApi 10.0.8 + Scalar.AspNetCore 2.14.14
 - JSON Patch: Microsoft.AspNetCore.JsonPatch.SystemTextJson 10.0.8 (STJ-based, not Newtonsoft)
+- Logging: Serilog.AspNetCore 9.0.0 + Serilog.Formatting.Compact 3.0.0 (CLEF JSON stdout)
+- Deployment: Google Cloud Run (us-central1), Artifact Registry, `persons-api` service, port 8080, scale-to-zero
+- CI/CD: GitHub Actions (`.github/workflows/cicd.yml`) — build-and-test → push-image → deploy, SA key auth
+- Codebase size: ~1,609 LOC C# source (post-v2.0); 58 files touched in v2.0, +10,142/-1,391 lines
 
 ## Constraints
 
@@ -118,6 +107,11 @@ The PersonsAPI is a fully operational .NET 10 Web API, deployed to Google Cloud 
 | UpdatePersonDto as mutable class | JsonPatchDocument<T>.ApplyTo() requires settable properties at runtime; positional records with init-only setters throw | ✓ Mutable class with { get; set; } properties; PATCH endpoint works correctly |
 | JsonPatch content type: application/json-patch+json | STJ JsonPatch package registers formatter for RFC 6902 media type only; plain application/json returns 415 | ✓ Confirmed — PATCH requests must use application/json-patch+json content type |
 | ResetableApiFactory for integration tests | Shared WebApplicationFactory + EF InMemory = ordering-dependent test failures; each fixture needs isolated DB | ✓ Guid.NewGuid() per factory instance eliminates cross-test state contamination |
+| Single-phase Serilog init via builder.Host.UseSerilog | No bootstrap logger needed; programmatic inline config avoids Serilog.Settings.Configuration package | ✓ CompactJsonFormatter on all environments; EF Core + AspNetCore namespaces at Warning |
+| UseHttpsRedirection removed unconditionally | Container never does TLS — Cloud Run terminates HTTPS, forwards HTTP to port 8080 | ✓ Program.cs pipeline is UseExceptionHandler → MapControllers → MapHealthChecks only |
+| aspnet:10.0 base image (Debian/Ubuntu Noble) over Alpine | Alpine has known culture/globalization issues with DateOnly; Debian is safe default | ✓ Non-root `app` user since .NET 8 default; curl installed for healthcheck probe |
+| Service Account JSON key for CI auth over Workload Identity Federation | WIF requires GCP org-level setup; SA key is simpler for a learning project; key gitignored, stored as GitHub encrypted secret | ✓ `google-github-actions/auth@v2` with `credentials_json: '${{ secrets.GCP_SA_KEY }}'` |
+| `branches: [master]` (not `[main]`) in cicd.yml | Repository default branch is `master` — `[main]` would silently never fire on any push | ✓ Fixed in code review (CR-01, commit b6c4a54) before verification |
 
 ---
 ## Evolution
@@ -138,4 +132,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-01 after v2.0 milestone start*
+*Last updated: 2026-06-05 after v2.0 milestone complete*

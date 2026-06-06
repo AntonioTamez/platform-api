@@ -2,37 +2,32 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Cloud Deployment
-status: milestone_complete
-last_updated: 2026-06-06T04:27:57.329Z
-last_activity: 2026-06-05
+status: Awaiting next milestone
+last_updated: "2026-06-06T04:41:20.542Z"
+last_activity: 2026-06-06 — Milestone v2.0 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
   total_plans: 6
   completed_plans: 6
   percent: 100
-stopped_at: Milestone complete (Phase 8 was final phase)
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-01)
+See: .planning/PROJECT.md (updated 2026-06-05)
 
 **Core value:** A correctly layered, richly modeled API that proves Clean and Hexagonal Architecture work together — where the domain drives everything and infrastructure is a detail.
-**Current focus:** Milestone complete
+**Current focus:** v2.0 archived — planning next milestone
 
 ## Current Position
 
-Phase: 8
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-06
-
-```
-Progress: [██████████] 100%
-```
+Phase: Milestone v2.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-06 — Milestone v2.0 completed and archived
 
 ## Performance Metrics
 
@@ -71,12 +66,11 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Phase 7 planning: confirm GCP project ID and region (affects Artifact Registry URL format)
-- Phase 8 planning: decide GitHub auth approach — Workload Identity Federation vs. Service Account JSON key
+None.
 
 ### Blockers/Concerns
 
-None yet.
+None.
 
 ## Deferred Items
 
@@ -89,4 +83,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Operator Next Steps
 
-- Run `/gsd-discuss-phase 6` or `/gsd-plan-phase 6` to start Phase 6: Containerization
+- Start the next milestone with /gsd-new-milestone

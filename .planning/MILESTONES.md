@@ -1,5 +1,23 @@
 # Milestones
 
+## v2.0 Cloud Deployment (Shipped: 2026-06-06)
+
+**Phases completed:** 4 phases (5-8), 6 plans, ~14 tasks
+**Files changed:** 58 | **Net additions:** +10,142 / -1,391 lines
+**Timeline:** 2026-06-02 → 2026-06-05 (4 days) | **Commits:** 67
+**Git range:** `f4fcbaa` (milestone start) → `2d74a48` (phase-08 complete)
+
+**Key accomplishments:**
+
+- Serilog CLEF JSON logging on stdout and anonymous `/health` endpoint — structured logs compatible with Google Cloud Logging, health probe ready for Cloud Run liveness check
+- Multi-stage Dockerfile (sdk:10.0 build → aspnet:10.0 final) with restore-first layer caching, non-root user, and HTTP-only pipeline (UseHttpsRedirection removed)
+- `docker-compose.yml` enabling one-command local container parity via `docker compose up` — all endpoints at port 8080 with JSON logs
+- DEPLOYMENT.md 374-line Cloud Run runbook covering full GCP setup (project, Artifact Registry, Service Account, deploy, verify); `key.json` gitignored
+- PersonsAPI deployed and publicly reachable on Google Cloud Run (us-central1) — all 4 success criteria confirmed: `/health` → 200, `/api/persons` → 3 persons, no crash loop, JSON logs in Cloud Logging
+- Three-job GitHub Actions CI/CD pipeline (build-and-test → push-image → deploy) — every push to `master` automatically builds, tests all 64 tests, pushes `:latest` to Artifact Registry, and deploys to Cloud Run
+
+---
+
 ## v1.0 PersonsAPI MVP (Shipped: 2026-06-02)
 
 **Phases completed:** 4 phases, 11 plans, 20 tasks

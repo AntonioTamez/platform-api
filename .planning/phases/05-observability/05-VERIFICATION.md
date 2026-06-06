@@ -1,13 +1,14 @@
 ---
 phase: 05-observability
 verified: 2026-06-03T04:00:00Z
-status: human_needed
-score: 6/7 must-haves verified
+status: complete
+score: 7/7 must-haves verified
 overrides_applied: 0
+human_verified: 2026-06-05
 human_verification:
   - test: "Confirm `dotnet run` stdout contains CLEF JSON lines"
-    expected: "Each log line on stdout is a valid JSON object with `@t`, `@mt` fields (CLEF format) — e.g. `{\"@t\":\"...\",\"@mt\":\"Now listening on: {address}\",...}`"
-    why_human: "Cannot start the API server and capture live stdout in a static code scan. The wiring is fully verified (UseSerilog + CompactJsonFormatter in place), but the actual runtime emission of CLEF lines requires a live `dotnet run` run. The SUMMARY documents a smoke test that confirmed this, but the verifier must defer to developer confirmation."
+    expected: "Each log line on stdout is a valid JSON object with `@t`, `@mt` fields (CLEF format)"
+    result: "CONFIRMED by developer — 2026-06-05"
 ---
 
 # Phase 5: Observability Verification Report
@@ -25,7 +26,7 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | `dotnet run` produces stdout lines that are valid JSON (CLEF format, one object per line) — OBS-01 | ? UNCERTAIN | `builder.Host.UseSerilog` with `CompactJsonFormatter` fully wired in Program.cs (line 15-19). Runtime output requires live process — deferred to human check. |
+| 1 | `dotnet run` produces stdout lines that are valid JSON (CLEF format, one object per line) — OBS-01 | VERIFIED | Confirmed by developer on 2026-06-05: `dotnet run` stdout produces valid CLEF JSON objects with `@t`, `@mt` fields. |
 | 2 | `GET /health` returns HTTP 200 with content-type `application/json` and body `{"status":"Healthy"}` — OBS-02 | VERIFIED | `app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = ... })` at line 42-49 of Program.cs. ResponseWriter sets `ContentType = "application/json; charset=utf-8"` and writes `{"status":"Healthy"}`. No `RequireAuthorization` present. |
 | 3 | `/health` requires no authentication — anonymous access works directly | VERIFIED | No `RequireAuthorization` call on `MapHealthChecks`. No auth middleware in the pipeline. D-03 comment present on the MapHealthChecks call. |
 | 4 | All 64 existing tests still pass after Serilog and health endpoint are added | VERIFIED | `dotnet test --nologo --verbosity quiet` result: Domain 32/32, Application 15/15, Infrastructure 5/5, Api 12/12. Total: 64/64 passed, 0 failed, 0 skipped. Confirmed live. |
@@ -33,7 +34,7 @@ human_verification:
 | 6 | Microsoft.AspNetCore namespace logs filtered to Warning level (D-10) | VERIFIED | Program.cs line 17: `.MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)` present in the `UseSerilog` lambda. |
 | 7 | Integration test output is not polluted by Serilog JSON lines (D-11) | VERIFIED | `dotnet test` output contains zero lines matching `{"@t":`. ResetableApiFactory replaces `ILoggerFactory` with `NullLoggerFactory.Instance` — confirmed effective. |
 
-**Score:** 6/7 truths verified (1 deferred to human for runtime confirmation)
+**Score:** 7/7 truths verified (human-confirmed 2026-06-05)
 
 ### Required Artifacts
 
@@ -63,7 +64,7 @@ Not applicable. No components rendering dynamic data were introduced. The `/heal
 | Build succeeds with 0 errors | `dotnet build --nologo` | 0 errors, 16 pre-existing CS0436 warnings from Mediator.SourceGenerator | PASS |
 | 64 tests pass | `dotnet test --nologo --verbosity quiet` | 64/64 passed, 0 failed, 0 skipped | PASS |
 | Test output free of CLEF JSON | `dotnet test` output grep for `{"@t":` | 0 matches | PASS |
-| CLEF JSON runtime output (OBS-01) | `dotnet run` stdout | Cannot execute without live server — wiring verified statically | SKIP (deferred to human) |
+| CLEF JSON runtime output (OBS-01) | `dotnet run` stdout | CLEF JSON confirmed by developer on 2026-06-05 | PASS |
 
 ### Probe Execution
 
@@ -73,7 +74,7 @@ No probe scripts declared in PLAN or found at `scripts/*/tests/probe-*.sh`. Step
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| OBS-01 | 05-01-PLAN.md | Developer can see structured JSON logs from the running API in Google Cloud Logging | VERIFIED (static) / UNCERTAIN (runtime) | `builder.Host.UseSerilog` + `CompactJsonFormatter` wired. CLEF format confirmed correct by wiring inspection. Runtime emission deferred to human check. |
+| OBS-01 | 05-01-PLAN.md | Developer can see structured JSON logs from the running API in Google Cloud Logging | VERIFIED | `builder.Host.UseSerilog` + `CompactJsonFormatter` wired. CLEF JSON stdout confirmed by developer run on 2026-06-05. |
 | OBS-02 | 05-01-PLAN.md | `/health` endpoint returns HTTP 200 OK and enables Cloud Run liveness probe | VERIFIED | `app.MapHealthChecks("/health", HealthCheckOptions)` with `ResponseWriter` writing `{"status":"Healthy"}` and `application/json` content type. Anonymous access confirmed (no auth). |
 
 **Note:** REQUIREMENTS.md traceability table still shows OBS-01 and OBS-02 as "Pending" status — this is the static document not updated post-phase. The implementation evidence satisfies both requirements.
