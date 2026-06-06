@@ -21,10 +21,10 @@ jobs:
         run: dotnet restore PersonsAPI.sln
 
       - name: Build
-        run: dotnet build src/PersonsAPI.sln --configuration Release --no-restore
+        run: dotnet build PersonsAPI.sln --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test src/PersonsAPI.sln --no-build --configuration Release --verbosity normal
+        run: dotnet test PersonsAPI.sln --no-build --configuration Release --verbosity normal
 
   push-image:
     runs-on: ubuntu-latest
